@@ -28,6 +28,16 @@
     "CHROMIUM_BIN": "/usr/bin/chromium"
   },
 
+  // Optional: Wer den Schluessel als GitHub-Secret hinterlegt, bekommt ihn in
+  // jeden neuen Codespace gereicht und muss ihn nie wieder eintippen. Ohne
+  // Secret fragt die Oberflaeche einmalig danach - beides funktioniert.
+  "secrets": {
+    "ANTHROPIC_API_KEY": {
+      "description": "API-Schluessel fuer Claude. Wird fuer Analyse und Texte gebraucht.",
+      "documentationUrl": "https://console.anthropic.com/settings/keys"
+    }
+  },
+
   "customizations": {
     "vscode": {
       "settings": {
