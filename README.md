@@ -3,14 +3,41 @@
 Erstellt aus einer Stellenanzeige vollstaendige, individuell zugeschnittene
 Bewerbungsunterlagen - optisch an das Design der Firma angepasst.
 
-Zwei Wege zur Bedienung, gleiche Logik dahinter:
+Drei Wege zur Bedienung, gleiche Logik dahinter:
 
-| | |
+| Weg | Fuer wen |
 |---|---|
-| **Weboberflaeche** mit Dashboard | `start.command` bzw. `start.bat` doppelklicken - Link einfuegen, fertig |
-| **Claude-Code-Skill** | `/bewerbung` im Terminal, fuer alle, die dort ohnehin arbeiten |
+| **GitHub Codespaces** | nichts installieren, laeuft im Browser |
+| **Eigener Rechner** | `start.command` bzw. `start.bat` doppelklicken; Daten bleiben lokal |
+| **Claude-Code-Skill** | fuer alle, die ohnehin in Claude Code arbeiten |
 
-## Weboberflaeche
+## Weg 1: Im Browser, ohne Installation (GitHub Codespaces)
+
+Fuer alle, die nichts installieren wollen. Laeuft komplett im Browser.
+
+1. Auf der GitHub-Seite des Projekts oben links auf die **Branch-Auswahl**
+   klicken (steht meist auf `main`) und
+   `claude/job-application-assistant-0ffe1n` auswaehlen.
+2. Rechts auf den gruenen Knopf **Code** klicken.
+3. Reiter **Codespaces** → **Create codespace on claude/job-application-...**
+
+Der Rest passiert von allein: Der Codespace richtet sich ein (beim ersten Mal
+zwei bis drei Minuten), startet den Assistenten und oeffnet die Oberflaeche in
+einem neuen Tab. Kommt kein Tab, hilft unten der Reiter **Ports** → beim
+Eintrag `8765` auf das Weltkugel-Symbol klicken.
+
+Startet nichts, im Terminal des Codespace einmal:
+
+```bash
+python3 webapp/server.py --kein-browser
+```
+
+**Zur Abwaegung:** Im Codespace liegen Lebenslauf und API-Schluessel auf einem
+GitHub-Server statt auf dem eigenen Rechner. Der Codespace ist privat und nur
+ueber das eigene Konto erreichbar - wer die Daten strikt lokal halten will,
+nimmt Weg 2.
+
+## Weg 2: Auf dem eigenen Rechner
 
 Startdatei im Projektordner doppelklicken:
 

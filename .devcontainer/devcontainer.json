@@ -1,0 +1,38 @@
+{
+  "name": "Bewerbungsassistent",
+
+  // Fertiges Python-Abbild. Spart beim ersten Start mehrere Minuten gegenueber
+  // einem selbstgebauten Container.
+  "image": "mcr.microsoft.com/devcontainers/python:3.11-bookworm",
+
+  // Laeuft einmal beim Erzeugen des Codespace: Chromium fuer die PDF-Ausgabe
+  // und die Python-Bibliothek fuer die Claude-API.
+  "postCreateCommand": "bash .devcontainer/einrichten.sh",
+
+  // Laeuft bei jedem Oeffnen: startet den Assistenten sofort, damit niemand
+  // etwas eintippen muss.
+  "postAttachCommand": {
+    "assistent": "python3 webapp/server.py --kein-browser"
+  },
+
+  "forwardPorts": [8765],
+  "portsAttributes": {
+    "8765": {
+      "label": "Bewerbungsassistent",
+      // Oeffnet die Oberflaeche automatisch in einem neuen Browser-Tab.
+      "onAutoForward": "openBrowser"
+    }
+  },
+
+  "remoteEnv": {
+    "CHROMIUM_BIN": "/usr/bin/chromium"
+  },
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  }
+}
