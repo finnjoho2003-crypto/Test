@@ -119,6 +119,7 @@ class Handler(BaseHTTPRequestHandler):
                 "kennzahlen": speicher.kennzahlen(),
                 "bewerbungen": [self._kurz(b) for b in speicher.bewerbungen_liste()],
                 "profil_fehlt": speicher.profil_vollstaendig(speicher.profil_lesen()),
+                "schluessel": speicher.schluessel_vorhanden(),
             })
 
         if pfad == "/api/profil":
@@ -154,6 +155,10 @@ class Handler(BaseHTTPRequestHandler):
     def _api_post(self, pfad: str) -> None:
         koerper = self._koerper()
 
+        if pfad == "/api/schluessel":
+            speicher.schluessel_speichern(koerper.get("schluessel", ""))
+            return self._json({"ok": True})
+
         if pfad == "/api/profil":
             return self._json(speicher.profil_schreiben(koerper))
 
@@ -164,6 +169,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._fehler("Bitte einen Link zur Stelle oder den Anzeigentext angeben.")
             if url and not re.match(r"https?://", url):
                 url = "https://" + url
+
+            if not speicher.schluessel_vorhanden():
+                return self._fehler(
+                    "Es ist noch kein API-Schluessel hinterlegt. Du kannst ihn "
+                    "oben auf der Uebersicht eintragen.", 409)
 
             fehlt = speicher.profil_vollstaendig(speicher.profil_lesen())
             if fehlt:
@@ -212,17 +222,33 @@ def main() -> None:
     args = parser.parse_args()
 
     speicher.BEWERBUNGEN.mkdir(parents=True, exist_ok=True)
+    hat_schluessel = speicher.schluessel_laden()
     adresse = f"http://127.0.0.1:{args.port}"
 
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    print(f"\n  Bewerbungsassistent laeuft auf {adresse}")
-    print(f"  Daten: {speicher.BASIS}")
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    except OSError as fehler:
+        print(f"\n  Port {args.port} ist belegt ({fehler}).")
+        print(f"  Laeuft der Assistent vielleicht schon? Dann einfach {adresse} oeffnen.")
+        print(f"  Sonst mit anderem Port starten:  python3 webapp/server.py --port {args.port + 1}\n")
+        raise SystemExit(1) from fehler
+
+    rahmen = "─" * 52
+    print(f"\n  {rahmen}")
+    print("   Der Bewerbungsassistent laeuft. Im Browser oeffnen:")
+    print(f"\n       {adresse}\n")
+    print(f"  {rahmen}")
+    print(f"\n  Daten liegen in: {speicher.BASIS}")
+    if not hat_schluessel:
+        print("  Hinweis: Noch kein API-Schluessel hinterlegt - die Seite fragt danach.")
     print("  Beenden mit Strg+C\n")
 
+    # Oeffnet sich nichts (Server ohne Oberflaeche, WSL, SSH), ist das kein
+    # Fehler - die Adresse oben steht bewusst gross da und laesst sich kopieren.
     if not args.kein_browser:
         try:
             webbrowser.open(adresse)
-        except Exception:  # noqa: BLE001 - ohne Browser laeuft es trotzdem
+        except Exception:  # noqa: BLE001
             pass
     try:
         server.serve_forever()

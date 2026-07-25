@@ -7,19 +7,41 @@ Zwei Wege zur Bedienung, gleiche Logik dahinter:
 
 | | |
 |---|---|
-| **Weboberflaeche** mit Dashboard | `python3 webapp/server.py` - Link einfuegen, fertig |
+| **Weboberflaeche** mit Dashboard | `start.command` bzw. `start.bat` doppelklicken - Link einfuegen, fertig |
 | **Claude-Code-Skill** | `/bewerbung` im Terminal, fuer alle, die dort ohnehin arbeiten |
 
 ## Weboberflaeche
 
-```bash
-pip install anthropic
-export ANTHROPIC_API_KEY="sk-ant-..."     # console.anthropic.com/settings/keys
-python3 webapp/server.py
+Startdatei im Projektordner doppelklicken:
+
+| System | Datei |
+|---|---|
+| macOS, Linux | `start.command` |
+| Windows | `start.bat` |
+
+Beim ersten Start richtet sich alles selbst ein. Danach im Browser oeffnen:
+
+```
+http://127.0.0.1:8765
 ```
 
-Der Browser oeffnet sich auf `http://127.0.0.1:8765`. Drei Ansichten, mehr
-braucht es nicht:
+Oeffnet sich kein Fenster von allein (haeufig bei WSL, SSH oder Servern ohne
+Oberflaeche), ist das kein Fehler - die Adresse steht beim Start gross im
+Terminal und laesst sich kopieren.
+
+Den API-Schluessel fragt die Seite beim ersten Oeffnen einmalig ab; er landet
+in `bewerbung/schluessel.txt` (nur fuer die eigene Nutzerin lesbar) und wird nie
+wieder abgefragt. Wer lieber eine Umgebungsvariable setzt, kann das weiterhin
+tun - `ANTHROPIC_API_KEY` hat Vorrang.
+
+Manueller Start ohne Skript:
+
+```bash
+pip install anthropic
+python3 webapp/server.py            # optional: --port 8899
+```
+
+### Drei Ansichten, mehr braucht es nicht
 
 - **Uebersicht** - alle Bewerbungen mit Status (Entwurf, Gesendet, Gespraech,
   Zusage, Absage), Kennzahlen und dem Eingabefeld fuer die naechste Stelle.
@@ -168,7 +190,8 @@ Der Ordner `bewerbung/` steht in `.gitignore` und landet nicht im Repository.
 - Python 3.11 oder neuer
 - Chrome oder Chromium (fuer die PDF-Ausgabe; abweichender Pfad ueber
   `CHROMIUM_BIN`)
-- Fuer die Weboberflaeche zusaetzlich: `pip install anthropic` und ein
-  `ANTHROPIC_API_KEY`
+- Fuer die Weboberflaeche zusaetzlich: `pip install anthropic` (uebernimmt die
+  Startdatei) und ein API-Schluessel, nach dem die Seite beim ersten Oeffnen
+  einmalig fragt
 
 Die beiden Skripte des Skills laufen mit der Python-Standardbibliothek allein.

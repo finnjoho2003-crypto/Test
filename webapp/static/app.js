@@ -107,6 +107,39 @@ async function ladeUebersicht() {
       <div class="beschriftung">${esc(kachel.text)}</div>
     </div>`).join("");
 
+  // Ohne Schluessel geht nichts - deshalb steht die Abfrage ganz oben und
+  // nicht in einem Einstellungsmenue, das niemand sucht.
+  $("#schluessel-warnung").innerHTML = daten.schluessel ? "" : `
+    <div class="hinweis warnung">
+      <p><strong>Einmalig: API-Schlüssel eintragen</strong></p>
+      <p>Das Tool nutzt Claude für die Analyse und die Texte. Den Schlüssel gibt es
+         unter <code>console.anthropic.com/settings/keys</code> — er beginnt mit
+         <code>sk-ant-</code> und bleibt auf diesem Rechner.</p>
+      <div class="neu-zeile" style="margin-top:9px">
+        <input type="password" id="schluessel-feld" placeholder="sk-ant-..."
+               autocomplete="off" style="flex:1 1 300px">
+        <button class="knopf" id="schluessel-speichern">Speichern</button>
+      </div>
+      <p id="schluessel-fehler" style="margin-top:7px;color:var(--absage)"></p>
+    </div>`;
+
+  if (!daten.schluessel) {
+    $("#schluessel-speichern").addEventListener("click", async () => {
+      const feld = $("#schluessel-feld");
+      try {
+        await hole("/api/schluessel", {
+          method: "POST", body: JSON.stringify({ schluessel: feld.value }),
+        });
+        ladeUebersicht();
+      } catch (fehler) {
+        $("#schluessel-fehler").textContent = fehler.message;
+      }
+    });
+    $("#schluessel-feld").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") $("#schluessel-speichern").click();
+    });
+  }
+
   $("#profil-warnung").innerHTML = daten.profil_fehlt.length
     ? `<div class="hinweis warnung">
          <p><strong>Im Profil fehlt noch: ${esc(daten.profil_fehlt.join(", "))}.</strong></p>

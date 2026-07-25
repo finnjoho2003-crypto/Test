@@ -29,8 +29,55 @@ STATUS = ["entwurf", "gesendet", "gespraech", "zusage", "absage"]
 _lock = threading.RLock()
 
 
+SCHLUESSEL_DATEI = BASIS / "schluessel.txt"
+
+
 def _jetzt() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+# --------------------------------------------------------------------------- #
+# API-Schluessel
+# --------------------------------------------------------------------------- #
+
+def schluessel_laden() -> bool:
+    """Legt einen gespeicherten Schluessel in die Umgebung. True, wenn einer da ist.
+
+    Ohne das muesste die Person bei jedem Start eine Umgebungsvariable setzen -
+    fuer die meisten die groesste Huerde ueberhaupt. Einmal eintragen genuegt.
+    """
+    if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"):
+        return True
+    try:
+        wert = SCHLUESSEL_DATEI.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return False
+    if wert:
+        os.environ["ANTHROPIC_API_KEY"] = wert
+        return True
+    return False
+
+
+def schluessel_speichern(wert: str) -> None:
+    wert = (wert or "").strip()
+    if not wert.startswith("sk-"):
+        raise ValueError("Das sieht nicht nach einem API-Schluessel aus "
+                         "(er beginnt mit 'sk-ant-').")
+    with _lock:
+        SCHLUESSEL_DATEI.parent.mkdir(parents=True, exist_ok=True)
+        SCHLUESSEL_DATEI.write_text(wert, encoding="utf-8")
+        # Nur fuer die eigene Nutzerin lesbar - es ist ein Zugangsdatum.
+        try:
+            os.chmod(SCHLUESSEL_DATEI, 0o600)
+        except OSError:
+            pass
+    os.environ["ANTHROPIC_API_KEY"] = wert
+
+
+def schluessel_vorhanden() -> bool:
+    return bool(os.environ.get("ANTHROPIC_API_KEY")
+                or os.environ.get("ANTHROPIC_AUTH_TOKEN")
+                or SCHLUESSEL_DATEI.exists())
 
 
 def _lade(pfad: Path, standard):
