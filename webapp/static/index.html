@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bewerbungsassistent</title>
+<link rel="stylesheet" href="stil.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
+</head>
+<body>
+
+<header class="kopf">
+  <div class="kopf-innen">
+    <div class="logo">Bewerbungs<span>assistent</span></div>
+    <nav>
+      <button data-ansicht="uebersicht" aria-current="page">Übersicht</button>
+      <button data-ansicht="profil">Profil</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <!-- ============ ÜBERSICHT ============ -->
+  <section class="ansicht" id="ansicht-uebersicht">
+    <h1>Übersicht</h1>
+    <p class="unterzeile">Alle Bewerbungen an einem Ort.</p>
+
+    <div id="profil-warnung"></div>
+
+    <div class="kennzahlen" id="kennzahlen"></div>
+
+    <div class="neu">
+      <label for="neu-url">Neue Bewerbung — Link zur Stellenanzeige einfügen</label>
+      <div class="neu-zeile">
+        <input type="url" id="neu-url" placeholder="https://firma.de/karriere/stellenangebot-12345"
+               autocomplete="off" spellcheck="false">
+        <button class="knopf" id="neu-start">Unterlagen erstellen</button>
+      </div>
+      <p style="margin:10px 0 0;font-size:13px;color:var(--text-leise)">
+        Kommt das Tool nicht an die Anzeige heran (manche Jobbörsen sperren das),
+        <button type="button" class="link-knopf" id="text-umschalten">Anzeigentext direkt einfügen</button>.
+      </p>
+      <div id="text-bereich" hidden style="margin-top:11px">
+        <textarea id="neu-text" placeholder="Vollständigen Text der Stellenanzeige hier einfügen …"></textarea>
+      </div>
+      <div id="neu-fehler"></div>
+    </div>
+
+    <h2>Bewerbungen</h2>
+    <div class="liste" id="liste"></div>
+  </section>
+
+  <!-- ============ DETAIL ============ -->
+  <section class="ansicht" id="ansicht-detail" hidden>
+    <div class="zurueck">
+      <button class="knopf leise" id="zurueck">← Zurück zur Übersicht</button>
+    </div>
+    <div id="detail-inhalt"></div>
+  </section>
+
+  <!-- ============ PROFIL ============ -->
+  <section class="ansicht" id="ansicht-profil" hidden>
+    <h1>Mein Profil</h1>
+    <p class="unterzeile">
+      Einmal ausfüllen, danach für jede Bewerbung wiederverwendbar. Alles hier
+      muss der Wahrheit entsprechen — das Tool wählt aus und formuliert, aber
+      es erfindet nichts dazu.
+    </p>
+
+    <h2>Persönliche Daten</h2>
+    <div class="karte">
+      <div class="feld-reihe">
+        <div class="feld"><label for="p-vorname">Vorname</label><input id="p-vorname" type="text"></div>
+        <div class="feld"><label for="p-nachname">Nachname</label><input id="p-nachname" type="text"></div>
+      </div>
+      <div class="feld-reihe">
+        <div class="feld"><label for="p-strasse">Straße und Hausnummer</label><input id="p-strasse" type="text"></div>
+        <div class="feld"><label for="p-plz_ort">PLZ und Ort</label><input id="p-plz_ort" type="text" placeholder="28217 Bremen"></div>
+      </div>
+      <div class="feld-reihe">
+        <div class="feld"><label for="p-email">E-Mail</label><input id="p-email" type="email"></div>
+        <div class="feld"><label for="p-telefon">Telefon</label><input id="p-telefon" type="text"></div>
+      </div>
+      <div class="feld-reihe">
+        <div class="feld"><label for="p-web">LinkedIn / Portfolio (optional)</label><input id="p-web" type="text"></div>
+        <div class="feld"><label for="p-berufsbezeichnung">Berufsbezeichnung</label><input id="p-berufsbezeichnung" type="text" placeholder="Logistikplanung &amp; Supply Chain"></div>
+      </div>
+    </div>
+
+    <h2>Aktuelle Situation</h2>
+    <div class="karte">
+      <div class="feld-reihe">
+        <div class="feld"><label for="s-verfuegbar_ab">Verfügbar ab</label><input id="s-verfuegbar_ab" type="text" placeholder="1. Oktober 2026"></div>
+        <div class="feld"><label for="s-gehaltsvorstellung">Gehaltsvorstellung (Jahresbrutto)</label><input id="s-gehaltsvorstellung" type="text" placeholder="78.000 EUR"></div>
+      </div>
+      <div class="feld"><label for="s-umzug">Umzug / Pendelradius / Remote-Wunsch</label><input id="s-umzug" type="text"></div>
+      <div class="feld">
+        <label for="s-wechselgrund">Warum suche ich etwas Neues</label>
+        <textarea id="s-wechselgrund" style="min-height:60px"></textarea>
+      </div>
+    </div>
+
+    <h2>Berufserfahrung</h2>
+    <p style="font-size:13.5px;color:var(--text-leise);margin:-6px 0 12px">
+      Neueste zuerst. Bei den Erfolgen zählen vor allem Zahlen — „Ladezeit von
+      4 s auf 900 ms gesenkt“ überzeugt, „war für die Performance zuständig“ nicht.
+    </p>
+    <div id="stationen"></div>
+    <button class="knopf leise" data-hinzu="stationen">+ Station hinzufügen</button>
+
+    <h2>Ausbildung</h2>
+    <div id="ausbildung"></div>
+    <button class="knopf leise" data-hinzu="ausbildung">+ Abschluss hinzufügen</button>
+
+    <h2>Kenntnisse</h2>
+    <div id="kenntnisse"></div>
+    <button class="knopf leise" data-hinzu="kenntnisse">+ Kategorie hinzufügen</button>
+
+    <h2>Sprachen</h2>
+    <div id="sprachen"></div>
+    <button class="knopf leise" data-hinzu="sprachen">+ Sprache hinzufügen</button>
+
+    <h2>Lücken und heikle Punkte</h2>
+    <div class="karte">
+      <p style="margin:0 0 9px;font-size:13.5px;color:var(--text-leise)">
+        Kommt nie in die Unterlagen — nur in die Gesprächsvorbereitung. Genau
+        diese Punkte fragt ein guter Personaler ab, und eine vorbereitete ruhige
+        Antwort ist der Unterschied zwischen „erklärt“ und „ertappt“.
+      </p>
+      <textarea id="p-luecken" placeholder="Zeitliche Lücken, häufige Wechsel, häufig verlangte Anforderungen, die mir fehlen …"></textarea>
+    </div>
+
+    <h2>Weiteres</h2>
+    <div class="karte">
+      <textarea id="p-weiteres" placeholder="Ehrenamt, Zertifikate, Publikationen, Auszeichnungen …"></textarea>
+    </div>
+
+    <div style="margin-top:22px;display:flex;gap:10px;align-items:center">
+      <button class="knopf" id="profil-speichern">Profil speichern</button>
+      <span id="profil-status" style="color:var(--text-leise);font-size:13.5px"></span>
+    </div>
+
+    <p class="fuss-hinweis">
+      Diese Daten bleiben auf diesem Rechner, im Ordner <code>bewerbung/</code>.
+      Sie werden an keinen Dritten übertragen. Für die Analyse einer Stelle
+      werden Profil und Anzeigentext an die Claude-API gesendet.
+    </p>
+  </section>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

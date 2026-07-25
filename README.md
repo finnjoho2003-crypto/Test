@@ -1,8 +1,40 @@
 # Bewerbungsassistent
 
-Ein Claude-Code-Skill, der aus einer Stellenanzeige vollstaendige, individuell
-zugeschnittene Bewerbungsunterlagen erstellt - optisch an das Design der Firma
-angepasst.
+Erstellt aus einer Stellenanzeige vollstaendige, individuell zugeschnittene
+Bewerbungsunterlagen - optisch an das Design der Firma angepasst.
+
+Zwei Wege zur Bedienung, gleiche Logik dahinter:
+
+| | |
+|---|---|
+| **Weboberflaeche** mit Dashboard | `python3 webapp/server.py` - Link einfuegen, fertig |
+| **Claude-Code-Skill** | `/bewerbung` im Terminal, fuer alle, die dort ohnehin arbeiten |
+
+## Weboberflaeche
+
+```bash
+pip install anthropic
+export ANTHROPIC_API_KEY="sk-ant-..."     # console.anthropic.com/settings/keys
+python3 webapp/server.py
+```
+
+Der Browser oeffnet sich auf `http://127.0.0.1:8765`. Drei Ansichten, mehr
+braucht es nicht:
+
+- **Uebersicht** - alle Bewerbungen mit Status (Entwurf, Gesendet, Gespraech,
+  Zusage, Absage), Kennzahlen und dem Eingabefeld fuer die naechste Stelle.
+  Link einfuegen, auf *Unterlagen erstellen* klicken, ein bis zwei Minuten
+  warten.
+- **Detailseite** - fertige PDFs mit Vorschau und Download, die Einschaetzung
+  zur Passung, die **Luecken** gegenueber der Anzeige, was die Anzeige verlangt,
+  was zwischen den Zeilen steht, die uebernommene Hausfarbe und das komplette
+  Briefing fuer das Vorstellungsgespraech.
+- **Profil** - die eigenen Daten. Einmal ausfuellen, danach ist jede weitere
+  Bewerbung eine Sache von Minuten.
+
+Der Server laeuft ausschliesslich lokal (`127.0.0.1`) und ist bewusst nicht von
+aussen erreichbar - auf ihm liegen Adresse, Telefonnummer und der komplette
+Werdegang.
 
 ## Was das Tool macht
 
@@ -37,10 +69,11 @@ Ueberschriften und Hervorhebungen. Fliesstext bleibt schwarz auf Weiss, und zu
 helle Markenfarben werden fuer Text automatisch abgedunkelt, bis der Kontrast
 lesbar ist. Das Logo der Firma wird nicht uebernommen.
 
-## Benutzung
+## Benutzung als Claude-Code-Skill
 
 Der Skill liegt unter `.claude/skills/bewerbung/` und wird automatisch geladen.
-In Claude Code genuegt:
+Er braucht keinen API-Schluessel, weil Claude Code selbst die Analyse und die
+Texte uebernimmt. In Claude Code genuegt:
 
 ```
 https://www.firma.de/karriere/stellenangebot-12345
@@ -78,6 +111,15 @@ Stelle.
 ## Aufbau
 
 ```
+webapp/                           Weboberflaeche (lokal, ohne Build-Schritt)
+├── server.py                     HTTP-Server, nur 127.0.0.1
+├── kern/
+│   ├── speicher.py               Profil und Bewerbungen als JSON
+│   ├── claude.py                 Analyse, Unterlagen, Gespraechsbriefing
+│   ├── dokumente.py              fuellt die Vorlagen, rendert PDF
+│   └── pipeline.py               Ablauf von der URL bis zum fertigen PDF
+└── static/                       HTML, CSS, JavaScript - kein Framework
+
 .claude/skills/bewerbung/
 ├── SKILL.md                      Ablauf und Regeln
 ├── references/
@@ -113,6 +155,20 @@ sich ueber die Umgebungsvariable `CHROMIUM_BIN` setzen.
 
 ## Datenschutz
 
-Das Profil enthaelt Adresse, Telefonnummer und Werdegang. Diese Daten bleiben im
-Arbeitsverzeichnis. Beim Auslesen der Firmenwebsite werden keine persoenlichen
-Daten uebertragen - es wird nur die oeffentliche Seite abgerufen.
+Das Profil enthaelt Adresse, Telefonnummer und Werdegang. Diese Daten liegen im
+Ordner `bewerbung/` und verlassen den Rechner nur an einer Stelle: Fuer die
+Analyse einer Stelle gehen Profil und Anzeigentext an die Claude-API. Beim
+Auslesen der Firmenwebsite werden keine persoenlichen Daten uebertragen - es
+wird nur die oeffentliche Seite abgerufen.
+
+Der Ordner `bewerbung/` steht in `.gitignore` und landet nicht im Repository.
+
+## Voraussetzungen
+
+- Python 3.11 oder neuer
+- Chrome oder Chromium (fuer die PDF-Ausgabe; abweichender Pfad ueber
+  `CHROMIUM_BIN`)
+- Fuer die Weboberflaeche zusaetzlich: `pip install anthropic` und ein
+  `ANTHROPIC_API_KEY`
+
+Die beiden Skripte des Skills laufen mit der Python-Standardbibliothek allein.
