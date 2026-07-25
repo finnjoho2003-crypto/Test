@@ -11,8 +11,6 @@ from __future__ import annotations
 import json
 import os
 
-import anthropic
-
 MODELL = "claude-opus-5"
 
 # Die Regel steht bewusst am Anfang jedes Prompts: Bei Bewerbungsunterlagen ist
@@ -30,8 +28,22 @@ Dann ist nicht nur die Stelle weg, sondern bei Anstellung auch die
 Anfechtbarkeit des Arbeitsvertrags im Raum."""
 
 
-def client() -> anthropic.Anthropic:
-    """Client mit Zugangsdaten aus der Umgebung (ANTHROPIC_API_KEY)."""
+def client():
+    """Client mit Zugangsdaten aus der Umgebung (ANTHROPIC_API_KEY).
+
+    Die Bibliothek wird bewusst erst hier importiert und nicht oben im Modul.
+    Sonst haengt der komplette Server an ihr - und die Oberflaeche liesse sich
+    nicht einmal oeffnen, um den Schluessel einzutragen, nur weil eine
+    Bibliothek fehlt, die allein fuer das Texten gebraucht wird.
+    """
+    try:
+        import anthropic  # noqa: PLC0415
+    except ModuleNotFoundError as fehler:
+        raise RuntimeError(
+            "Die Bibliothek 'anthropic' fehlt. Im Terminal einmal ausfuehren: "
+            "pip install anthropic - danach den Assistenten neu starten."
+        ) from fehler
+
     if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
         raise RuntimeError(
             "Kein API-Schluessel gefunden. Bitte ANTHROPIC_API_KEY setzen "

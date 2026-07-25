@@ -12,7 +12,7 @@
   // Laeuft bei jedem Oeffnen: startet den Assistenten sofort, damit niemand
   // etwas eintippen muss.
   "postAttachCommand": {
-    "assistent": "python3 webapp/server.py --kein-browser"
+    "assistent": "bash .devcontainer/starten.sh"
   },
 
   "forwardPorts": [8765],
