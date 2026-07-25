@@ -10,4 +10,7 @@ if ! python3 -c "import anthropic" 2>/dev/null; then
   pip install --quiet anthropic || echo "  (Fehlgeschlagen - die Oberflaeche laeuft trotzdem.)"
 fi
 
-exec python3 webapp/server.py --kein-browser
+# 0.0.0.0 nur hier: Die Weiterleitung von GitHub erreicht den Dienst je nach
+# Umgebung nicht auf 127.0.0.1. Der Container ist isoliert, der Zugang laeuft
+# ueber die GitHub-Anmeldung - lokal bleibt es beim strengen Standard.
+exec python3 webapp/server.py --host 0.0.0.0 --kein-browser

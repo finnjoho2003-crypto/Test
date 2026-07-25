@@ -3,9 +3,16 @@
 
     python3 webapp/server.py            # http://127.0.0.1:8765
 
-Bindet absichtlich nur an 127.0.0.1: Auf dem Server liegen Adresse, Telefon-
-nummer und der komplette Werdegang der Person. Diese Daten gehoeren nicht ins
-Netzwerk, und ein versehentliches --host 0.0.0.0 waere hier ein echter Schaden.
+Standardmaessig nur auf 127.0.0.1 erreichbar: Auf dem Server liegen Adresse,
+Telefonnummer und der komplette Werdegang der Person - die gehoeren nicht
+ungefragt ins lokale Netz.
+
+Mit --host laesst sich das aendern. Das ist fuer genau einen Fall gedacht:
+In einem Codespace erreicht die Weiterleitung von GitHub den Dienst je nach
+Umgebung nicht auf 127.0.0.1. Dort ist der Container isoliert und der Zugang
+laeuft ohnehin ueber die Anmeldung bei GitHub - auf dem eigenen Rechner waere
+dieselbe Einstellung dagegen leichtsinnig, deshalb bleibt sie dort aus und
+wird beim Start deutlich gemeldet.
 """
 
 from __future__ import annotations
@@ -218,6 +225,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--host", default="127.0.0.1",
+                        help="Adresse, auf der gelauscht wird. Standard 127.0.0.1 "
+                             "(nur dieser Rechner). Im Codespace 0.0.0.0.")
     parser.add_argument("--kein-browser", action="store_true")
     args = parser.parse_args()
 
@@ -226,7 +236,7 @@ def main() -> None:
     adresse = f"http://127.0.0.1:{args.port}"
 
     try:
-        server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+        server = ThreadingHTTPServer((args.host, args.port), Handler)
     except OSError as fehler:
         print(f"\n  Port {args.port} ist belegt ({fehler}).")
         print(f"  Laeuft der Assistent vielleicht schon? Dann einfach {adresse} oeffnen.")
@@ -238,6 +248,8 @@ def main() -> None:
     print("   Der Bewerbungsassistent laeuft. Im Browser oeffnen:")
     print(f"\n       {adresse}\n")
     print(f"  {rahmen}")
+    if args.host not in ("127.0.0.1", "localhost"):
+        print(f"  Achtung: erreichbar auf {args.host} - nicht nur auf diesem Rechner.")
     print(f"\n  Daten liegen in: {speicher.BASIS}")
     if not hat_schluessel:
         print("  Hinweis: Noch kein API-Schluessel hinterlegt - die Seite fragt danach.")
