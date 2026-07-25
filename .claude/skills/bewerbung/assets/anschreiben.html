@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Anschreiben</title>
+
+<!-- Fallback-Palette; theme.css aus extract_brand.py ueberschreibt sie. -->
+<style>
+  :root {
+    --primary: #1f3a5f;
+    --primary-text: #1f3a5f;
+    --on-primary: #ffffff;
+    --secondary: #1f3a5f;
+    --accent: #1f3a5f;
+    --ink: #1a1a1a;
+    --muted: #5a5a5a;
+    --rule: #c9d4e2;
+    --wash: #f4f7fa;
+    --font-heading: "Liberation Sans", Arial, Helvetica, sans-serif;
+    --font-body: "Liberation Sans", Arial, Helvetica, sans-serif;
+  }
+</style>
+<link rel="stylesheet" href="theme.css">
+
+<style>
+  /* Massvorgaben nach DIN 5008 (Form B): Anschriftfeld beginnt bei 45 mm,
+     Seitenraender 25/20 mm. Personaler erkennen ein normgerechtes Schreiben
+     sofort - und ein schiefes eben auch. */
+  @page { size: A4; margin: 20mm 20mm 18mm 25mm; }
+
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    margin: 0;
+    font-family: var(--font-body);
+    font-size: 11pt;
+    line-height: 1.5;
+    color: var(--ink);
+  }
+
+  /* ---------- Briefkopf ---------- */
+  .briefkopf {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding-bottom: 3mm;
+    border-bottom: 2.2pt solid var(--primary);
+  }
+  .absender-name {
+    font-family: var(--font-heading);
+    font-size: 17pt;
+    font-weight: 700;
+    letter-spacing: -0.2pt;
+    color: var(--primary-text);
+    margin: 0;
+  }
+  .absender-rolle {
+    font-size: 9.5pt;
+    color: var(--muted);
+    margin: 1mm 0 0;
+  }
+  .absender-kontakt {
+    text-align: right;
+    font-size: 9pt;
+    line-height: 1.6;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .absender-kontakt a { color: inherit; text-decoration: none; }
+
+  /* ---------- Anschriftfeld ---------- */
+  /* Das Anschreiben muss auf eine Seite. Reicht es knapp nicht, zuerst den
+     Text kuerzen - ein Absatz weniger wirkt immer besser als ein gequetschtes
+     Layout. Erst danach an den Abstaenden drehen: .empfaenger margin-top
+     12mm → 10mm, .anlagen und .gruss je 6mm → 5mm, zuletzt line-height
+     1.5 → 1.45. Schriftgroesse unter 10.5pt nicht reduzieren. */
+  .empfaenger {
+    margin-top: 12mm;
+    font-size: 11pt;
+    line-height: 1.45;
+  }
+  .empfaenger .firma { font-weight: 600; }
+
+  .datum {
+    text-align: right;
+    margin-top: 6mm;
+    font-size: 10.5pt;
+    color: var(--muted);
+  }
+
+  /* ---------- Betreff ---------- */
+  .betreff {
+    margin-top: 7mm;
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: 11.5pt;
+    color: var(--primary-text);
+    line-height: 1.35;
+  }
+  .betreff .referenz {
+    display: block;
+    font-weight: 400;
+    font-size: 9.5pt;
+    color: var(--muted);
+    margin-top: 1mm;
+  }
+
+  /* ---------- Fliesstext ---------- */
+  .anrede { margin-top: 6mm; }
+  p.text { margin: 0 0 3.6mm; text-align: left; }
+  p.text:last-of-type { margin-bottom: 0; }
+  strong { color: var(--primary-text); font-weight: 700; }
+
+  .gruss { margin-top: 6mm; }
+  .signatur { margin-top: 2mm; }
+  .signatur img { height: 14mm; display: block; margin-bottom: 1mm; }
+  .signatur .name { font-weight: 600; }
+
+  .anlagen {
+    margin-top: 6mm;
+    font-size: 9.5pt;
+    color: var(--muted);
+    border-top: 0.6pt solid var(--rule);
+    padding-top: 2.5mm;
+  }
+</style>
+</head>
+
+<body>
+
+<!-- ============ BRIEFKOPF ============ -->
+<header class="briefkopf">
+  <div>
+    <p class="absender-name">{{VORNAME}} {{NACHNAME}}</p>
+    <p class="absender-rolle">{{BERUFSBEZEICHNUNG}}</p>
+  </div>
+  <div class="absender-kontakt">
+    <div>{{STRASSE}}, {{PLZ_ORT}}</div>
+    <div><a href="mailto:{{EMAIL}}">{{EMAIL}}</a></div>
+    <div>{{TELEFON}}</div>
+  </div>
+</header>
+
+<!-- ============ ANSCHRIFT ============ -->
+<div class="empfaenger">
+  <div class="firma">{{FIRMA}}</div>
+  <div>{{ANSPRECHPARTNER}}</div>
+  <div>{{FIRMA_STRASSE}}</div>
+  <div>{{FIRMA_PLZ_ORT}}</div>
+</div>
+
+<div class="datum">{{ORT}}, {{DATUM}}</div>
+
+<!-- ============ BETREFF ============ -->
+<!-- Konkrete Stellenbezeichnung plus Referenznummer: zeigt sofort, worum es
+     geht, und hilft bei Firmen mit vielen offenen Stellen der Zuordnung. -->
+<div class="betreff">
+  Bewerbung als {{STELLENBEZEICHNUNG}}
+  <span class="referenz">{{REFERENZNUMMER_UND_QUELLE}}</span>
+</div>
+
+<!-- ============ TEXT ============ -->
+<p class="anrede">{{ANREDE}}</p>
+
+<!-- Einstieg: Bezug zur Firma, keine Floskel. -->
+<p class="text">{{EINSTIEG}}</p>
+
+<!-- Beleg 1: staerkste Anforderung der Anzeige mit konkretem Beispiel. -->
+<p class="text">{{BELEG_ANFORDERUNG_1}}</p>
+
+<!-- Beleg 2: zweite Anforderung, moeglichst mit Zahl. -->
+<p class="text">{{BELEG_ANFORDERUNG_2}}</p>
+
+<!-- Motivation: warum genau diese Firma. -->
+<p class="text">{{MOTIVATION}}</p>
+
+<!-- Abschluss: Verfuegbarkeit, ggf. Gehalt, Gespraechswunsch. -->
+<p class="text">{{ABSCHLUSS}}</p>
+
+<p class="gruss">Mit freundlichen Grüßen</p>
+<div class="signatur">
+  <!-- <img src="unterschrift.png" alt=""> -->
+  <div class="name">{{VORNAME}} {{NACHNAME}}</div>
+</div>
+
+<div class="anlagen">Anlagen: {{ANLAGEN}}</div>
+
+</body>
+</html>

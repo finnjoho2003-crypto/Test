@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Lebenslauf</title>
+
+<!-- Fallback-Palette. theme.css (aus extract_brand.py) ueberschreibt sie und
+     faerbt das Dokument in die Hausfarben der Firma. Fehlt die Datei, bleibt
+     dieses seriöse Dunkelblau stehen - das Dokument ist nie kaputt. -->
+<style>
+  :root {
+    --primary: #1f3a5f;
+    --primary-text: #1f3a5f;
+    --on-primary: #ffffff;
+    --secondary: #1f3a5f;
+    --accent: #1f3a5f;
+    --ink: #1a1a1a;
+    --muted: #5a5a5a;
+    --rule: #c9d4e2;
+    --wash: #f4f7fa;
+    --font-heading: "Liberation Sans", Arial, Helvetica, sans-serif;
+    --font-body: "Liberation Sans", Arial, Helvetica, sans-serif;
+  }
+</style>
+<link rel="stylesheet" href="theme.css">
+
+<style>
+  @page { size: A4; margin: 16mm 18mm 15mm 18mm; }
+
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    margin: 0;
+    font-family: var(--font-body);
+    font-size: 10.2pt;
+    line-height: 1.45;
+    color: var(--ink);
+  }
+
+  /* ---------- Kopf ---------- */
+  .kopf {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 14mm;
+    padding-bottom: 4mm;
+    border-bottom: 2.2pt solid var(--primary);
+  }
+  .name {
+    font-family: var(--font-heading);
+    font-size: 25pt;
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -0.4pt;
+    color: var(--primary-text);
+    margin: 0;
+  }
+  .rolle {
+    font-family: var(--font-heading);
+    font-size: 11.5pt;
+    font-weight: 400;
+    color: var(--muted);
+    margin: 1.5mm 0 0;
+    letter-spacing: 0.2pt;
+  }
+  .kontakt {
+    font-size: 9.2pt;
+    line-height: 1.65;
+    text-align: right;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .kontakt a { color: inherit; text-decoration: none; }
+  .kontakt .label { color: var(--muted); }
+
+  /* Optionales Bewerbungsfoto. In Deutschland ueblich, rechtlich aber nicht
+     gefordert (AGG) - der Block bleibt daher entfernbar, ohne dass das Layout
+     springt. */
+  .foto {
+    width: 30mm; height: 40mm; object-fit: cover;
+    border-radius: 1.5mm; flex: none;
+  }
+
+  /* ---------- Abschnitte ---------- */
+  /* Reicht der Platz knapp nicht, in dieser Reihenfolge nachziehen - dann
+     bleibt der Satzspiegel ruhig: section margin-top 6mm → 5mm, .eintrag
+     margin-bottom 4mm → 3mm, .fuss margin-top 6mm → 4mm, zuletzt body
+     font-size 10.2pt → 10pt. Unter 10pt nicht gehen; dann lieber Inhalt
+     kuerzen, denn ein zu enger Lebenslauf wird nicht mehr ueberflogen. */
+  section { margin-top: 6mm; }
+  h2 {
+    font-family: var(--font-heading);
+    font-size: 10.5pt;
+    font-weight: 700;
+    letter-spacing: 0.9pt;
+    text-transform: uppercase;
+    color: var(--primary-text);
+    margin: 0 0 2.5mm;
+    padding-bottom: 1.2mm;
+    border-bottom: 0.8pt solid var(--rule);
+  }
+
+  /* Zweispaltig: links Zeitraum, rechts Inhalt. Diese Tabellenform ist im
+     deutschen Lebenslauf Standard und laesst sich schnell ueberfliegen. */
+  .eintrag {
+    display: grid;
+    grid-template-columns: 30mm 1fr;
+    gap: 0 5mm;
+    margin-bottom: 4mm;
+    page-break-inside: avoid;
+  }
+  .eintrag:last-child { margin-bottom: 0; }
+  .zeit {
+    font-size: 9.2pt;
+    color: var(--muted);
+    padding-top: 0.4mm;
+    font-variant-numeric: tabular-nums;
+  }
+  .titel {
+    font-family: var(--font-heading);
+    font-weight: 700;
+    font-size: 10.8pt;
+    margin: 0;
+    color: var(--ink);
+  }
+  .firma {
+    font-size: 9.8pt;
+    color: var(--primary-text);
+    margin: 0.4mm 0 1.2mm;
+    font-weight: 600;
+  }
+  .firma .ort { color: var(--muted); font-weight: 400; }
+
+  ul.punkte { margin: 0; padding-left: 4.4mm; }
+  ul.punkte li { margin-bottom: 0.9mm; }
+  ul.punkte li::marker { color: var(--primary); }
+  /* Zahlen im Lebenslauf sind das, was haengen bleibt - hier optisch verankert. */
+  .kpi { font-weight: 700; color: var(--primary-text); }
+
+  /* ---------- Kompetenzen ---------- */
+  .skill-zeile {
+    display: grid;
+    grid-template-columns: 30mm 1fr;
+    gap: 0 5mm;
+    margin-bottom: 1.8mm;
+  }
+  .skill-label { font-size: 9.2pt; color: var(--muted); }
+  .skill-werte { font-size: 10pt; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 1.5mm; }
+  .chip {
+    background: var(--wash);
+    border: 0.6pt solid var(--rule);
+    border-radius: 1.2mm;
+    padding: 0.7mm 2.2mm;
+    font-size: 9pt;
+  }
+
+  /* ---------- Fuss ---------- */
+  .fuss {
+    margin-top: 6mm;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    font-size: 9.2pt;
+    color: var(--muted);
+  }
+  .unterschrift { text-align: right; }
+  .unterschrift img { height: 13mm; display: block; margin-left: auto; }
+
+  @media print { .eintrag, section { page-break-inside: avoid; } }
+</style>
+</head>
+
+<body>
+
+<!-- ============ KOPF ============ -->
+<header class="kopf">
+  <div>
+    <h1 class="name">{{VORNAME}} {{NACHNAME}}</h1>
+    <!-- Berufsbezeichnung an die Zielstelle angleichen, ohne zu behaupten,
+         man haette den Titel bereits gefuehrt. -->
+    <p class="rolle">{{BERUFSBEZEICHNUNG}}</p>
+  </div>
+  <div class="kontakt">
+    <div>{{STRASSE}}</div>
+    <div>{{PLZ_ORT}}</div>
+    <div><a href="mailto:{{EMAIL}}">{{EMAIL}}</a></div>
+    <div>{{TELEFON}}</div>
+    <div>{{LINKEDIN_ODER_PORTFOLIO}}</div>
+  </div>
+  <!-- Foto optional: <img class="foto" src="foto.jpg" alt=""> -->
+</header>
+
+<!-- ============ KURZPROFIL ============ -->
+<!-- Drei bis vier Zeilen, die die Kernbotschaft der Bewerbung vorwegnehmen.
+     Wer nur den Kopf liest, muss hier schon wissen, warum es passt. -->
+<section>
+  <h2>Profil</h2>
+  <p style="margin:0">{{KURZPROFIL}}</p>
+</section>
+
+<!-- ============ BERUFSERFAHRUNG ============ -->
+<section>
+  <h2>Berufserfahrung</h2>
+
+  <!-- Block pro Station wiederholen, neueste zuerst. -->
+  <div class="eintrag">
+    <div class="zeit">{{VON}} – {{BIS}}</div>
+    <div>
+      <p class="titel">{{POSITION}}</p>
+      <p class="firma">{{FIRMA}} <span class="ort">· {{ORT}}</span></p>
+      <ul class="punkte">
+        <li>{{ERFOLG_MIT_ZAHL}}</li>
+        <li>{{AUFGABE_MIT_BEZUG_ZUR_ZIELSTELLE}}</li>
+      </ul>
+    </div>
+  </div>
+
+</section>
+
+<!-- ============ AUSBILDUNG ============ -->
+<section>
+  <h2>Ausbildung</h2>
+  <div class="eintrag">
+    <div class="zeit">{{VON}} – {{BIS}}</div>
+    <div>
+      <p class="titel">{{ABSCHLUSS}}</p>
+      <p class="firma">{{HOCHSCHULE}} <span class="ort">· {{ORT}}</span></p>
+      <ul class="punkte">
+        <li>{{SCHWERPUNKT_ODER_NOTE}}</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ KENNTNISSE ============ -->
+<section>
+  <h2>Kenntnisse</h2>
+  <div class="skill-zeile">
+    <div class="skill-label">{{KATEGORIE}}</div>
+    <div class="skill-werte">{{KOMMAGETRENNTE_LISTE}}</div>
+  </div>
+  <!-- Alternativ als Chips:
+  <div class="chips"><span class="chip">{{SKILL}}</span></div> -->
+</section>
+
+<!-- ============ SPRACHEN ============ -->
+<section>
+  <h2>Sprachen</h2>
+  <div class="skill-zeile">
+    <div class="skill-label">{{SPRACHE}}</div>
+    <div class="skill-werte">{{NIVEAU}}</div>
+  </div>
+</section>
+
+<!-- ============ FUSS ============ -->
+<footer class="fuss">
+  <div>{{ORT}}, {{DATUM}}</div>
+  <div class="unterschrift">
+    <!-- <img src="unterschrift.png" alt=""> -->
+    <div>{{VORNAME}} {{NACHNAME}}</div>
+  </div>
+</footer>
+
+</body>
+</html>
