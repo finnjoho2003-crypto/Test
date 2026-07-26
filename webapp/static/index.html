@@ -3,19 +3,27 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bewerbungsassistent</title>
+<title>Hired</title>
 <link rel="stylesheet" href="stil.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%23101f3c'/><path d='M20 16v32M44 16v32M20 32h24' stroke='%23c9a227' stroke-width='6' stroke-linecap='round'/></svg>">
 </head>
 <body>
 
 <header class="kopf">
   <div class="kopf-innen">
-    <div class="logo">Bewerbungs<span>assistent</span></div>
-    <nav>
-      <button data-ansicht="uebersicht" aria-current="page">Übersicht</button>
-      <button data-ansicht="profil">Profil</button>
-    </nav>
+    <div class="logo"><span class="wortmarke">Hired</span></div>
+    <div class="kopf-rechts">
+      <!-- Profilwahl gehoert in den Kopf, nicht in ein Menue: Mit welcher
+           Person gerade gearbeitet wird, muss immer sichtbar sein. -->
+      <label class="profilwahl">
+        <span class="profilwahl-text">Profil</span>
+        <select id="profil-wahl" aria-label="Profil wechseln"></select>
+      </label>
+      <nav>
+        <button data-ansicht="uebersicht" aria-current="page">Übersicht</button>
+        <button data-ansicht="profil">Profil</button>
+      </nav>
+    </div>
   </div>
 </header>
 
@@ -63,12 +71,29 @@
 
   <!-- ============ PROFIL ============ -->
   <section class="ansicht" id="ansicht-profil" hidden>
-    <h1>Mein Profil</h1>
+    <h1 id="profil-titel">Profil</h1>
     <p class="unterzeile">
       Einmal ausfüllen, danach für jede Bewerbung wiederverwendbar. Alles hier
       muss der Wahrheit entsprechen — das Tool wählt aus und formuliert, aber
       es erfindet nichts dazu.
     </p>
+
+    <!-- Mehrere Profile: etwa eines für die eigene Branche und eines für einen
+         Quereinstieg, mit anderer Schwerpunktsetzung im Werdegang. -->
+    <div class="karte profilverwaltung">
+      <div class="feld-reihe">
+        <div class="feld">
+          <label for="p-name">Name dieses Profils</label>
+          <input id="p-name" type="text" placeholder="z. B. Vertrieb oder Quereinstieg IT">
+        </div>
+        <div class="feld feld-knoepfe">
+          <button type="button" class="knopf leise" id="profil-neu">Neues Profil</button>
+          <button type="button" class="knopf leise" id="profil-kopieren">Kopie anlegen</button>
+          <button type="button" class="knopf gefahr" id="profil-loeschen">Löschen</button>
+        </div>
+      </div>
+      <p class="notiz" id="profil-anzahl"></p>
+    </div>
 
     <h2>Persönliche Daten</h2>
     <div class="karte">

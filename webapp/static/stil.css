@@ -5,20 +5,31 @@
 :root {
   color-scheme: light dark;
 
-  --flaeche:     #fcfcfb;
+  /* Hired - Navy und Gold.
+     Gold traegt nie Text auf hellem Grund: #a67c00 erreicht gerade eben 4.5:1,
+     das hellere Gold der Marke bei weitem nicht. Gold ist deshalb Flaeche,
+     Linie und Akzent auf Navy - fuer Text auf Weiss steht das dunkle
+     Messington bereit. */
+  --navy:        #101f3c;
+  --navy-hell:   #1b3358;
+  --gold:        #c9a227;
+  --gold-hell:   #e3c766;
+  --gold-text:   #8a6d0b;
+
+  --flaeche:     #f7f6f3;
   --karte:       #ffffff;
-  --rand:        #e4e3df;
-  --rand-stark:  #cfcec8;
-  --text:        #0b0b0b;
-  --text-leise:  #52514e;
-  --text-still:  #6f6e69;
-  --akzent:      #1f63b4;
-  --akzent-weich:#eef4fc;
+  --rand:        #e3e0d8;
+  --rand-stark:  #cbc6b8;
+  --text:        #0d1526;
+  --text-leise:  #4a5062;
+  --text-still:  #6b7080;
+  --akzent:      #1b3a6b;
+  --akzent-weich:#eef2f9;
 
   --entwurf:   #5a5955;
-  --gesendet:  #1f63b4;
-  --gespraech: #4a3aa7;
-  --zusage:    #006300;
+  --gesendet:  #1b3a6b;
+  --gespraech: #6b4ea8;
+  --zusage:    #0a6b3d;
   --absage:    #b32b2b;
 
   --radius: 10px;
@@ -28,21 +39,23 @@
 
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) {
-    --flaeche:     #1a1a19;
-    --karte:       #232322;
-    --rand:        #34342f;
-    --rand-stark:  #4a4a44;
-    --text:        #ffffff;
-    --text-leise:  #c3c2b7;
-    --text-still:  #97968d;
-    --akzent:      #5b9ceb;
-    --akzent-weich:#1e2a3a;
+    /* Im Dunkeln ist Navy der Grund - Gold darf hier auch Text sein. */
+    --flaeche:     #0b1220;
+    --karte:       #131d31;
+    --rand:        #24314b;
+    --rand-stark:  #3a4a6a;
+    --text:        #f2f4f8;
+    --text-leise:  #b9c2d4;
+    --text-still:  #8b97ad;
+    --akzent:      #d9b544;
+    --akzent-weich:#1b2740;
+    --gold-text:   #e3c766;
 
-    --entwurf:   #a8a79f;
-    --gesendet:  #5b9ceb;
-    --gespraech: #9085e9;
-    --zusage:    #2fc02f;
-    --absage:    #e86a6a;
+    --entwurf:   #9aa4b8;
+    --gesendet:  #7aa7e8;
+    --gespraech: #b0a0f0;
+    --zusage:    #3fca77;
+    --absage:    #f08080;
   }
 }
 
@@ -60,31 +73,66 @@ body {
 a { color: var(--akzent); }
 
 /* ---------- Kopf ---------- */
+/* Der Kopf traegt die Marke: durchgehend Navy, darunter eine schmale
+   Goldkante. Auf Navy ist Gold gefahrlos - Weiss auf #101f3c erreicht 15:1,
+   Gold #e3c766 immer noch 8:1. */
 header.kopf {
-  border-bottom: 1px solid var(--rand);
-  background: var(--karte);
+  background: var(--navy);
+  border-bottom: 2px solid var(--gold);
   position: sticky;
   top: 0;
   z-index: 10;
 }
 .kopf-innen {
   max-width: 980px; margin: 0 auto; padding: 0 20px;
-  display: flex; align-items: center; gap: 20px; height: 60px;
+  display: flex; align-items: center; gap: 20px; height: 62px;
 }
-.logo { font-weight: 700; font-size: 16.5px; letter-spacing: -0.2px; }
-.logo span { color: var(--akzent); }
-nav { display: flex; gap: 4px; margin-left: auto; }
+.logo { display: flex; align-items: center; gap: 9px; }
+.wortmarke {
+  font-size: 21px; font-weight: 700; color: #fff;
+  letter-spacing: 1.2px; text-transform: uppercase;
+}
+/* Der Goldstrich unter der Wortmarke - eine Linie statt eines Effekts. */
+.wortmarke::after {
+  content: ""; display: block; height: 2px; margin-top: 3px;
+  background: linear-gradient(90deg, var(--gold), transparent);
+}
+
+.kopf-rechts { display: flex; align-items: center; gap: 16px; margin-left: auto; }
+
+.profilwahl { display: flex; align-items: center; gap: 7px; }
+.profilwahl-text {
+  font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+  color: var(--gold-hell);
+}
+.profilwahl select {
+  font: inherit; font-size: 13.5px;
+  background: rgba(255, 255, 255, .08);
+  color: #fff;
+  border: 1px solid rgba(227, 199, 102, .45);
+  border-radius: 7px; padding: 5px 9px; max-width: 190px; cursor: pointer;
+}
+.profilwahl select:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.profilwahl select option { color: #111; background: #fff; }
+
+nav { display: flex; gap: 4px; }
 nav button {
-  border: 0; background: none; font: inherit; color: var(--text-leise);
+  border: 0; background: none; font: inherit; color: rgba(255, 255, 255, .72);
   padding: 7px 13px; border-radius: 7px; cursor: pointer;
 }
-nav button:hover { background: var(--akzent-weich); color: var(--text); }
-nav button[aria-current="page"] { background: var(--akzent-weich); color: var(--akzent); font-weight: 600; }
+nav button:hover { background: rgba(255, 255, 255, .1); color: #fff; }
+nav button[aria-current="page"] {
+  background: rgba(227, 199, 102, .16); color: var(--gold-hell); font-weight: 600;
+}
 
 main { max-width: 980px; margin: 0 auto; padding: 26px 20px 80px; }
 .ansicht[hidden] { display: none; }
 
-h1 { font-size: 23px; margin: 0 0 4px; letter-spacing: -0.3px; }
+h1 { font-size: 25px; margin: 0 0 4px; letter-spacing: -0.3px; }
+h1::after {
+  content: ""; display: block; width: 42px; height: 3px; border-radius: 2px;
+  background: var(--gold); margin-top: 8px;
+}
 h2 { font-size: 16px; margin: 30px 0 12px; letter-spacing: -0.1px; }
 h3 { font-size: 14px; margin: 20px 0 8px; }
 .unterzeile { color: var(--text-leise); margin: 0 0 22px; }
@@ -93,9 +141,12 @@ h3 { font-size: 14px; margin: 20px 0 8px; }
 .kennzahlen { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
 .kachel {
   background: var(--karte); border: 1px solid var(--rand);
+  /* Nach der Kurzform - sonst setzt "border" die Goldkante wieder zurueck. */
+  border-left: 3px solid var(--gold);
   border-radius: var(--radius); padding: 14px 16px;
 }
-.kachel .wert { font-size: 27px; font-weight: 700; line-height: 1.1; letter-spacing: -0.6px; }
+.kachel .wert { font-size: 27px; font-weight: 700; line-height: 1.1;
+                letter-spacing: -0.6px; color: var(--akzent); }
 .kachel .beschriftung { font-size: 12.5px; color: var(--text-leise); margin-top: 3px; }
 .kachel.gut .wert { color: var(--zusage); }
 
@@ -122,11 +173,14 @@ label { display: block; font-size: 12.5px; color: var(--text-leise); margin: 0 0
 
 button.knopf {
   font: inherit; font-weight: 600; cursor: pointer;
-  background: var(--akzent); color: #fff; border: 1px solid transparent;
+  background: var(--navy); color: #fff; border: 1px solid transparent;
   border-radius: 8px; padding: 9px 17px; white-space: nowrap;
+  box-shadow: inset 0 -2px 0 rgba(201, 162, 39, .85);
+  transition: transform .12s ease, box-shadow .12s ease;
 }
-button.knopf:hover { filter: brightness(1.08); }
-button.knopf:disabled { opacity: .55; cursor: not-allowed; filter: none; }
+button.knopf:hover { box-shadow: inset 0 -3px 0 var(--gold); transform: translateY(-1px); }
+button.knopf:active { transform: none; }
+button.knopf:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; transform: none; }
 button.knopf.leise { background: transparent; color: var(--text-leise); border-color: var(--rand-stark); }
 button.knopf.leise:hover { background: var(--akzent-weich); color: var(--text); filter: none; }
 button.knopf.gefahr { background: transparent; color: var(--absage); border-color: var(--rand-stark); }
@@ -271,3 +325,23 @@ ul.knapp li { margin-bottom: 5px; }
 }
 .status-gut     { color: var(--zusage); }
 .status-schlecht { color: var(--absage); }
+
+/* ---------- Profilverwaltung ---------- */
+.profilverwaltung { border-left: 3px solid var(--gold); }
+.feld-knoepfe { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+.notiz { font-size: 12.5px; color: var(--text-still); margin: 4px 0 0; }
+
+/* Bei schmalen Fenstern bricht der Kopf um, statt die Profilauswahl
+   abzuschneiden - auf dem Handy ist sie sonst nicht mehr bedienbar. */
+@media (max-width: 640px) {
+  .kopf-innen { height: auto; padding: 10px 16px; flex-wrap: wrap; gap: 10px; }
+  .kopf-rechts { width: 100%; margin-left: 0; justify-content: space-between; }
+  .profilwahl select { max-width: 150px; }
+  .feld-reihe { grid-template-columns: 1fr; }
+}
+
+/* Wer Bewegung im System abgeschaltet hat, bekommt hier auch keine. */
+@media (prefers-reduced-motion: reduce) {
+  button.knopf { transition: none; }
+  button.knopf:hover { transform: none; }
+}

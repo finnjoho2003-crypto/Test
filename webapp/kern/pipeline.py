@@ -151,7 +151,10 @@ def _lauf(bewerbung_id: str, anzeigentext: str | None) -> None:
     if eintrag is None:
         return
     ordner = speicher.datei_pfad(bewerbung_id, "x").parent
-    profil = speicher.profil_lesen()
+    # Das Profil, mit dem die Bewerbung angelegt wurde - nicht das gerade
+    # ausgewaehlte. Sonst wechselt bei einem Wiederholungslauf unbemerkt die
+    # Person.
+    profil = speicher.profil_lesen(eintrag.get("profil_id", ""))
 
     try:
         # 1 - Anzeige

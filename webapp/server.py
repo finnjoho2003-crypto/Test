@@ -43,7 +43,7 @@ MAX_BODY = 4 * 1024 * 1024
 # Dienst - und ein Aufruf, den es hier noch nicht gibt, endet in einem nackten
 # 404, das nach einem kaputten Programm aussieht. Hochzaehlen, sobald die
 # Oberflaeche etwas braucht, das der Dienst vorher nicht konnte.
-API_STAND = 2
+API_STAND = 3
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -112,11 +112,20 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:  # noqa: N802
         treffer = re.fullmatch(r"/api/bewerbungen/([0-9a-f]+)", self.path)
-        if not treffer:
-            return self._fehler("Unbekannter Pfad", 404)
-        if speicher.bewerbung_loeschen(treffer.group(1)):
-            return self._json({"ok": True})
-        return self._fehler("Nicht gefunden", 404)
+        if treffer:
+            if speicher.bewerbung_loeschen(treffer.group(1)):
+                return self._json({"ok": True})
+            return self._fehler("Nicht gefunden", 404)
+
+        treffer = re.fullmatch(r"/api/profile/([0-9a-f]+)", self.path)
+        if treffer:
+            if speicher.profil_loeschen(treffer.group(1)):
+                return self._json({"ok": True})
+            return self._fehler(
+                "Das letzte Profil lässt sich nicht löschen - ohne Profil "
+                "können keine Unterlagen erstellt werden.", 409)
+
+        return self._fehler("Unbekannter Pfad", 404)
 
     # ------------------------------------------------------------- statisch
 
@@ -140,10 +149,16 @@ class Handler(BaseHTTPRequestHandler):
                 "bewerbungen": [self._kurz(b) for b in speicher.bewerbungen_liste()],
                 "profil_fehlt": speicher.profil_vollstaendig(speicher.profil_lesen()),
                 "schluessel": speicher.schluessel_vorhanden(),
+                "profile": speicher.profile_liste(),
+                "profil_aktiv": speicher.aktives_profil_id(),
             })
 
         if pfad == "/api/profil":
             return self._json(speicher.profil_lesen())
+
+        if pfad == "/api/profile":
+            return self._json({"profile": speicher.profile_liste(),
+                               "aktiv": speicher.aktives_profil_id()})
 
         treffer = re.fullmatch(r"/api/bewerbungen/([0-9a-f]+)", pfad)
         if treffer:
@@ -198,6 +213,23 @@ class Handler(BaseHTTPRequestHandler):
 
         if pfad == "/api/profil":
             return self._json(speicher.profil_schreiben(koerper))
+
+        if pfad == "/api/profile":
+            name = (koerper.get("name") or "").strip()
+            if not name:
+                return self._fehler("Bitte einen Namen für das Profil angeben.")
+            # Uebernahme aus einem bestehenden Profil: Wer eine Zweitfassung
+            # fuer eine andere Branche baut, tippt sonst denselben Werdegang
+            # ein zweites Mal ab.
+            vorlage = (koerper.get("kopie_von") or "").strip()
+            daten = speicher.profil_lesen(vorlage) if vorlage else None
+            return self._json(speicher.profil_anlegen(name, daten), 201)
+
+        treffer = re.fullmatch(r"/api/profile/([0-9a-f]+)/waehlen", pfad)
+        if treffer:
+            if speicher.profil_waehlen(treffer.group(1)):
+                return self._json({"ok": True})
+            return self._fehler("Profil nicht gefunden", 404)
 
         if pfad == "/api/bewerbungen":
             url = (koerper.get("url") or "").strip()
@@ -255,7 +287,7 @@ class Handler(BaseHTTPRequestHandler):
     def _kurz(eintrag: dict) -> dict:
         return {schluessel: eintrag.get(schluessel) for schluessel in
                 ("id", "titel", "firma", "ort", "status", "phase", "fortschritt",
-                 "fehler", "erstellt", "passung", "url")} | {
+                 "fehler", "erstellt", "passung", "url", "profil_name")} | {
             "hat_dateien": bool(eintrag.get("dateien"))}
 
 

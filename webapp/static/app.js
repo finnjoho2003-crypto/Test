@@ -14,7 +14,7 @@ const STATUS_TEXT = {
 // Muss mit API_STAND in server.py uebereinstimmen. Passt es nicht, laeuft der
 // Dienst noch in einer aelteren Fassung als diese Oberflaeche - siehe die
 // Erklaerung an der Konstante dort.
-const BENOETIGTER_STAND = 2;
+const BENOETIGTER_STAND = 3;
 
 let zustand = { ansicht: "uebersicht", offen: null, timer: null };
 
@@ -238,7 +238,10 @@ function zeigeSchluessel(vorhanden, aufgeklappt = false) {
 
 function eintragHtml(b) {
   const laeuft = b.phase !== "fertig" && b.phase !== "fehler";
-  const meta = [b.firma, b.ort, datum(b.erstellt)].filter(Boolean).join(" · ");
+  // Bei mehreren Profilen ist die Zuordnung wichtig - sonst weiss man
+  // spaeter nicht mehr, welcher Werdegang in dieser Bewerbung steckt.
+  const meta = [b.firma, b.ort, b.profil_name, datum(b.erstellt)]
+    .filter(Boolean).join(" · ");
 
   let rechts = abzeichen(b.status);
   if (laeuft) {
@@ -700,8 +703,72 @@ const LISTEN = {
 
 let profilDaten = null;
 
+/* ---- Mehrere Profile ----------------------------------------------------
+   Etwa eines für die eigene Branche und eines für einen Quereinstieg, mit
+   anders gewichtetem Werdegang. Die Auswahl steht im Kopf und nicht in einem
+   Menü: Mit welcher Person gerade gearbeitet wird, darf man nie raten müssen. */
+
+async function zeichneProfilwahl() {
+  const daten = await hole("/api/profile");
+  const wahl = $("#profil-wahl");
+  wahl.innerHTML = daten.profile.map((p) =>
+    `<option value="${esc(p.id)}"${p.id === daten.aktiv ? " selected" : ""}>${
+      esc(p.name)}${p.vollstaendig ? "" : " (unvollständig)"}</option>`).join("");
+  const anzahl = $("#profil-anzahl");
+  if (anzahl) {
+    anzahl.textContent = daten.profile.length === 1
+      ? "Ein Profil angelegt. Über „Neues Profil“ lässt sich ein weiteres anlegen."
+      : `${daten.profile.length} Profile angelegt. Umschalten oben rechts.`;
+  }
+  return daten;
+}
+
+async function wechsleProfil(id) {
+  await hole(`/api/profile/${id}/waehlen`, { method: "POST" });
+  await ladeProfil();
+  await ladeUebersicht();
+}
+
+$("#profil-wahl").addEventListener("change", (e) => wechsleProfil(e.target.value));
+
+async function neuesProfil(alsKopie) {
+  const name = prompt(alsKopie
+    ? "Name für die Kopie:"
+    : "Name für das neue Profil (z. B. „Vertrieb“ oder „Quereinstieg IT“):", "");
+  if (name === null) return;
+  if (!name.trim()) { alert("Bitte einen Namen angeben."); return; }
+  const nutzlast = { name: name.trim() };
+  // Bei der Kopie den Werdegang mitnehmen - ihn ein zweites Mal abzutippen
+  // wäre der sicherste Weg, dass es nie jemand tut.
+  if (alsKopie) nutzlast.kopie_von = $("#profil-wahl").value;
+  await hole("/api/profile", { method: "POST", body: JSON.stringify(nutzlast) });
+  await ladeProfil();
+  await ladeUebersicht();
+}
+
+$("#profil-neu").addEventListener("click", () => neuesProfil(false));
+$("#profil-kopieren").addEventListener("click", () => neuesProfil(true));
+
+$("#profil-loeschen").addEventListener("click", async () => {
+  const wahl = $("#profil-wahl");
+  const name = wahl.options[wahl.selectedIndex]?.text || "dieses Profil";
+  if (!confirm(`„${name}“ löschen?\n\nBereits erstellte Bewerbungen bleiben erhalten.`)) return;
+  try {
+    await hole(`/api/profile/${wahl.value}`, { method: "DELETE" });
+    await ladeProfil();
+    await ladeUebersicht();
+  } catch (fehler) {
+    alert(fehler.message);
+  }
+});
+
 async function ladeProfil() {
   profilDaten = await hole("/api/profil");
+  await zeichneProfilwahl();
+  const titel = $("#profil-titel");
+  if (titel) titel.textContent = profilDaten.name || "Profil";
+  const namensfeld = $("#p-name");
+  if (namensfeld) namensfeld.value = profilDaten.name || "";
   const p = profilDaten.person || {}, s = profilDaten.situation || {};
   for (const [feld, wert] of Object.entries(p)) {
     const el = $(`#p-${feld}`); if (el) el.value = wert || "";
@@ -774,6 +841,7 @@ $("#profil-speichern").addEventListener("click", async () => {
 
   const nutzlast = {
     person, situation,
+    name: ($("#p-name") || {}).value?.trim() || "",
     weiteres: $("#p-weiteres").value.trim(),
     luecken: $("#p-luecken").value.trim(),
   };
@@ -783,6 +851,10 @@ $("#profil-speichern").addEventListener("click", async () => {
   status.textContent = "Wird gespeichert …";
   try {
     profilDaten = await hole("/api/profil", { method: "POST", body: JSON.stringify(nutzlast) });
+    // Der Name kann sich geändert haben - Kopfauswahl und Überschrift ziehen nach.
+    await zeichneProfilwahl();
+    const titel = $("#profil-titel");
+    if (titel) titel.textContent = profilDaten.name || "Profil";
     status.textContent = "Gespeichert.";
     setTimeout(() => (status.textContent = ""), 2500);
   } catch (fehler) {
@@ -792,4 +864,7 @@ $("#profil-speichern").addEventListener("click", async () => {
 
 /* ------------------------------------------------------------------ Start */
 
+// Die Profilauswahl im Kopf gehoert zu jeder Ansicht - deshalb hier und nicht
+// erst, wenn die Profilseite geoeffnet wird.
+zeichneProfilwahl().catch(() => {});
 routen();

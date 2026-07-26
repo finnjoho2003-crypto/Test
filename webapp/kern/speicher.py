@@ -149,11 +149,22 @@ LEERES_PROFIL = {
 }
 
 
-def profil_lesen() -> dict:
-    daten = _lade(PROFIL, {})
-    # Fehlende Abschnitte auffuellen, damit das Frontend nie auf None trifft.
+PROFILE = BASIS / "profile"
+ZUSTAND = BASIS / "zustand.json"
+
+
+def _profil_pfad(profil_id: str) -> Path:
+    # Wie bei den Bewerbungen: Ein Dateiname aus einer Anfrage darf niemals
+    # ungeprueft in einen Pfad wandern.
+    if not re.fullmatch(r"[0-9a-f]{8,32}", profil_id or ""):
+        raise ValueError("ungueltige Profil-ID")
+    return PROFILE / f"{profil_id}.json"
+
+
+def _fuelle(daten: dict) -> dict:
+    """Fehlende Abschnitte auffuellen, damit das Frontend nie auf None trifft."""
     profil = json.loads(json.dumps(LEERES_PROFIL))
-    for schluessel, wert in daten.items():
+    for schluessel, wert in (daten or {}).items():
         if schluessel in profil and isinstance(profil[schluessel], dict):
             profil[schluessel].update(wert or {})
         else:
@@ -161,15 +172,134 @@ def profil_lesen() -> dict:
     return profil
 
 
-def profil_schreiben(daten: dict) -> dict:
+def _wandere_um() -> None:
+    """Uebernimmt ein einzelnes altes profil.json als erstes benanntes Profil.
+
+    Laeuft still und nur einmal. Wer das Tool schon benutzt hat, soll nach dem
+    Update sein Profil vorfinden und nicht vor einer leeren Maske sitzen -
+    Daten geraeuschlos zu verlieren waere das Schlimmste, was hier passieren
+    kann.
+    """
+    if PROFILE.exists() and any(PROFILE.glob("*.json")):
+        return
+    altes = _lade(PROFIL, None)
+    PROFILE.mkdir(parents=True, exist_ok=True)
+    profil_id = uuid.uuid4().hex[:12]
+    profil = _fuelle(altes or {})
+    person = profil.get("person", {})
+    profil["id"] = profil_id
+    profil["name"] = (f"{person.get('vorname', '')} {person.get('nachname', '')}".strip()
+                      or "Mein Profil")
+    profil["erstellt"] = _jetzt()
+    _speichere(_profil_pfad(profil_id), profil)
+    _speichere(ZUSTAND, {"aktives_profil": profil_id})
+    if altes is not None:
+        # Die alte Datei bleibt als Sicherheitskopie liegen - sie kostet nichts
+        # und ist die einzige Ruecklaufmoeglichkeit, falls hier etwas schieflief.
+        PROFIL.replace(PROFIL.with_name("profil.json.vor-umstellung"))
+
+
+def profile_liste() -> list[dict]:
+    """Alle Profile, nur mit dem, was zur Auswahl noetig ist."""
     with _lock:
-        profil = profil_lesen()
+        _wandere_um()
+    eintraege = []
+    for pfad in sorted(PROFILE.glob("*.json")):
+        daten = _lade(pfad, None)
+        if not daten:
+            continue
+        person = daten.get("person", {})
+        eintraege.append({
+            "id": daten.get("id") or pfad.stem,
+            "name": daten.get("name") or "Ohne Namen",
+            "rolle": person.get("berufsbezeichnung", ""),
+            "vollstaendig": not profil_vollstaendig(daten),
+            "erstellt": daten.get("erstellt", ""),
+        })
+    eintraege.sort(key=lambda e: e.get("erstellt", ""))
+    return eintraege
+
+
+def aktives_profil_id() -> str:
+    with _lock:
+        _wandere_um()
+        gewaehlt = (_lade(ZUSTAND, {}) or {}).get("aktives_profil", "")
+        if gewaehlt and _profil_pfad(gewaehlt).is_file():
+            return gewaehlt
+        # Zeigt der Verweis ins Leere - geloeschtes Profil, von Hand
+        # aufgeraeumt -, faellt die Wahl auf das erste vorhandene, statt die
+        # Oberflaeche mit einem leeren Profil dastehen zu lassen.
+        vorhanden = sorted(PROFILE.glob("*.json"))
+        if not vorhanden:
+            return ""
+        neu = vorhanden[0].stem
+        _speichere(ZUSTAND, {"aktives_profil": neu})
+        return neu
+
+
+def profil_lesen(profil_id: str = "") -> dict:
+    profil_id = profil_id or aktives_profil_id()
+    if not profil_id:
+        return _fuelle({})
+    return _fuelle(_lade(_profil_pfad(profil_id), {}))
+
+
+def profil_schreiben(daten: dict, profil_id: str = "") -> dict:
+    with _lock:
+        profil_id = profil_id or aktives_profil_id()
+        if not profil_id:
+            return profil_anlegen((daten or {}).get("name") or "Mein Profil", daten)
+        profil = profil_lesen(profil_id)
         for schluessel, wert in (daten or {}).items():
             if schluessel in LEERES_PROFIL:
                 profil[schluessel] = wert
+        if (daten or {}).get("name"):
+            profil["name"] = str(daten["name"]).strip()[:60]
+        profil["id"] = profil_id
         profil["aktualisiert"] = _jetzt()
-        _speichere(PROFIL, profil)
+        _speichere(_profil_pfad(profil_id), profil)
     return profil
+
+
+def profil_anlegen(name: str, daten: dict | None = None) -> dict:
+    with _lock:
+        _wandere_um()
+        profil_id = uuid.uuid4().hex[:12]
+        profil = _fuelle(daten or {})
+        profil["id"] = profil_id
+        profil["name"] = (name or "").strip()[:60] or "Neues Profil"
+        profil["erstellt"] = _jetzt()
+        PROFILE.mkdir(parents=True, exist_ok=True)
+        _speichere(_profil_pfad(profil_id), profil)
+        _speichere(ZUSTAND, {"aktives_profil": profil_id})
+    return profil
+
+
+def profil_waehlen(profil_id: str) -> bool:
+    with _lock:
+        if not _profil_pfad(profil_id).is_file():
+            return False
+        _speichere(ZUSTAND, {"aktives_profil": profil_id})
+    return True
+
+
+def profil_loeschen(profil_id: str) -> bool:
+    """Loescht ein Profil. Das letzte bleibt bestehen.
+
+    Ohne Profil laesst sich keine Bewerbung erstellen; ein Programm, das sich
+    per Klick in einen unbrauchbaren Zustand bringen laesst, ist ein
+    schlechtes Programm. Bereits erstellte Bewerbungen bleiben unberuehrt -
+    ihre Dokumente sind fertig und sollen es bleiben.
+    """
+    with _lock:
+        pfad = _profil_pfad(profil_id)
+        if not pfad.is_file() or len(list(PROFILE.glob("*.json"))) <= 1:
+            return False
+        pfad.unlink()
+        if (_lade(ZUSTAND, {}) or {}).get("aktives_profil") == profil_id:
+            rest = sorted(PROFILE.glob("*.json"))
+            _speichere(ZUSTAND, {"aktives_profil": rest[0].stem if rest else ""})
+    return True
 
 
 def profil_vollstaendig(profil: dict) -> list[str]:
@@ -204,8 +334,15 @@ def _ordner(bewerbung_id: str) -> Path:
 def bewerbung_anlegen(url: str, titel: str = "") -> dict:
     with _lock:
         bewerbung_id = uuid.uuid4().hex[:12]
+        # Festhalten, mit welchem Profil die Bewerbung entstanden ist. Wird
+        # spaeter gewechselt, muss ein Wiederholungslauf trotzdem dieselbe
+        # Person verwenden - sonst stuende auf einmal ein fremder Werdegang in
+        # einer bereits verschickten Bewerbung.
+        aktiv = aktives_profil_id()
         eintrag = {
             "id": bewerbung_id,
+            "profil_id": aktiv,
+            "profil_name": profil_lesen(aktiv).get("name", "") if aktiv else "",
             "url": url,
             "titel": titel or "Wird analysiert …",
             "firma": "",
