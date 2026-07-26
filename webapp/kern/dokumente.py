@@ -40,10 +40,14 @@ def _absatz(text: str) -> str:
 # Lebenslauf
 # --------------------------------------------------------------------------- #
 
-def baue_lebenslauf(inhalt: dict, person: dict, ort: str) -> str:
+def baue_lebenslauf(inhalt: dict, person: dict, ort: str, foto: str = "") -> str:
     vorlage = (VORLAGEN / "lebenslauf.html").read_text(encoding="utf-8")
 
     name = f"{person.get('vorname', '')} {person.get('nachname', '')}".strip()
+    # Das Bild wird eingebettet uebergeben, nicht verlinkt - siehe
+    # speicher.foto_als_datenadresse(). Ohne Foto bleibt der Platz einfach leer;
+    # in Deutschland ist ein Bewerbungsfoto ueblich, aber nirgends vorgeschrieben.
+    bild = f'\n  <img class="foto" src="{foto}" alt="">' if foto else ""
     kopf = f"""<header class="kopf">
   <div>
     <h1 class="name">{e(name)}</h1>
@@ -55,7 +59,7 @@ def baue_lebenslauf(inhalt: dict, person: dict, ort: str) -> str:
     <div><a href="mailto:{e(person.get('email', ''))}">{e(person.get('email', ''))}</a></div>
     <div>{e(person.get('telefon', ''))}</div>
     <div>{e(person.get('web', ''))}</div>
-  </div>
+  </div>{bild}
 </header>"""
 
     teile = [f"""<section>

@@ -368,6 +368,132 @@ die Firma, und taucht in keinem Dokument auf."""
 
 
 # --------------------------------------------------------------------------- #
+# Jobsuche im Web
+# --------------------------------------------------------------------------- #
+
+TREFFER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "stellen": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "titel": {"type": "string"},
+                    "firma": {"type": "string"},
+                    "ort": {"type": "string"},
+                    "url": {"type": "string",
+                            "description": "Direkter Link zur Anzeige. Leer, wenn nicht gefunden."},
+                    "quelle": {"type": "string",
+                               "description": "Wo die Anzeige steht, z. B. die Jobboerse"},
+                    "warum_passend": {"type": "string",
+                                      "description": "Bezug zum Profil, ein bis zwei Saetze"},
+                    "haken": {"type": "string",
+                              "description": "Was gegen die Stelle sprechen koennte. Leer, wenn nichts auffiel."},
+                    "passung": {"type": "string", "enum": ["hoch", "mittel", "niedrig"]},
+                },
+                "required": ["titel", "firma", "ort", "url", "quelle",
+                             "warum_passend", "haken", "passung"],
+                "additionalProperties": False,
+            },
+        },
+        "hinweis": {"type": "string",
+                    "description": "Was die Suche erschwert hat, oder leer"},
+    },
+    "required": ["stellen", "hinweis"],
+    "additionalProperties": False,
+}
+
+
+def suche_stellen(profil: dict, was: str, wo: str, anzahl: int = 8) -> dict:
+    """Sucht im Web nach passenden Stellen und liefert eine geprüfte Liste.
+
+    Zwei Aufrufe statt einem: Erst wird gesucht, dann wird das Ergebnis in Form
+    gebracht. Die Websuche liefert Fundstellen mit Quellenangaben; ein
+    erzwungenes Schema im selben Aufruf vertraegt sich damit nicht zuverlaessig.
+    Getrennt ist beides robust - und der zweite Aufruf ist billig, weil er nur
+    noch Text sortiert.
+    """
+    person = profil.get("person", {})
+    stationen = profil.get("stationen", [])
+    kurz = {
+        "berufsbezeichnung": person.get("berufsbezeichnung", ""),
+        "kurzprofil": profil.get("kurzprofil", ""),
+        "stationen": [{"position": s.get("position", ""), "firma": s.get("firma", ""),
+                       "von": s.get("von", ""), "bis": s.get("bis", "")}
+                      for s in stationen[:6]],
+        "kenntnisse": profil.get("kenntnisse", []),
+        "sprachen": profil.get("sprachen", []),
+        "situation": profil.get("situation", {}),
+    }
+
+    system = f"""{GRUNDREGEL}
+
+Du suchst jetzt im Web nach offenen Stellen fuer diese Person.
+
+Vorgehen: Formuliere mehrere Suchanfragen - einmal mit der Berufsbezeichnung,
+einmal mit den wichtigsten Kenntnissen, einmal mit branchenueblichen
+Alternativbezeichnungen fuer dieselbe Taetigkeit. Suche auf Deutsch, wenn der
+Ort in Deutschland, Oesterreich oder der Schweiz liegt.
+
+Nenne nur Stellen, die du tatsaechlich in den Suchergebnissen gefunden hast,
+mit der Adresse, die dort steht. Erfinde keine Anzeigen und keine Links - ein
+toter Link kostet die Person Zeit und Vertrauen. Findest du weniger als
+gewuenscht, ist das das Ergebnis; fuelle nicht auf.
+
+Bewerte die Passung am Profil, nicht am Wunschdenken. Nenne bei jeder Stelle
+auch, was dagegen sprechen koennte - eine Liste, in der alles passt, ist keine
+Hilfe."""
+
+    inhalt = (
+        f"Gesucht wird: {was or 'passende Stellen zum Profil'}\n"
+        f"Ort / Region: {wo or 'keine Vorgabe'}\n"
+        f"Gewuenschte Anzahl: hoechstens {anzahl}\n\n"
+        "PROFIL:\n" + json.dumps(kurz, ensure_ascii=False, indent=2)
+    )
+
+    with client().messages.stream(
+        model=MODELL,
+        max_tokens=16000,
+        system=system,
+        thinking={"type": "adaptive"},
+        output_config={"effort": "high"},
+        tools=[{"type": "web_search_20260209", "name": "web_search", "max_uses": 12}],
+        messages=[{"role": "user", "content": inhalt}],
+    ) as stream:
+        antwort = stream.get_final_message()
+
+    # Serverseitige Werkzeuge haben ein Rundenlimit. Wird es erreicht, endet die
+    # Antwort mit "pause_turn" - ohne Fortsetzung braeche die Suche hier
+    # unbemerkt mitten im Vorgang ab.
+    verlauf = [{"role": "user", "content": inhalt}]
+    for _ in range(3):
+        if antwort.stop_reason != "pause_turn":
+            break
+        verlauf = verlauf[:1] + [{"role": "assistant", "content": antwort.content}]
+        with client().messages.stream(
+            model=MODELL, max_tokens=16000, system=system,
+            thinking={"type": "adaptive"}, output_config={"effort": "high"},
+            tools=[{"type": "web_search_20260209", "name": "web_search", "max_uses": 12}],
+            messages=verlauf,
+        ) as stream:
+            antwort = stream.get_final_message()
+
+    if antwort.stop_reason == "refusal":
+        raise RuntimeError("Die Suchanfrage wurde abgelehnt. Bitte anders formulieren.")
+
+    gefunden = "\n".join(b.text for b in antwort.content if b.type == "text").strip()
+    if not gefunden:
+        return {"stellen": [], "hinweis": "Die Suche hat nichts Verwertbares geliefert."}
+
+    return _json_antwort(
+        "Bringe die folgenden Suchergebnisse in Form. Uebernimm ausschliesslich, "
+        "was im Text steht - besonders die Adressen. Erfinde nichts, ergaenze "
+        "nichts, und lass eine Stelle lieber weg als sie zu erraten.",
+        gefunden, TREFFER_SCHEMA, max_tokens=8000)
+
+
+# --------------------------------------------------------------------------- #
 # 3. Gespraechsvorbereitung
 # --------------------------------------------------------------------------- #
 

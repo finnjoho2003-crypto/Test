@@ -21,6 +21,7 @@
       </label>
       <nav>
         <button data-ansicht="uebersicht" aria-current="page">Übersicht</button>
+        <button data-ansicht="jobsuche">Jobsuche</button>
         <button data-ansicht="profil">Profil</button>
       </nav>
     </div>
@@ -69,6 +70,36 @@
     <div id="detail-inhalt"></div>
   </section>
 
+  <!-- ============ JOBSUCHE ============ -->
+  <section class="ansicht" id="ansicht-jobsuche" hidden>
+    <h1>Jobsuche</h1>
+    <p class="unterzeile">
+      Sucht im Web nach Stellen, die zum aktuell gewählten Profil passen.
+      Gefunden wird nur, was wirklich ausgeschrieben ist — erfundene Anzeigen
+      und tote Links kosten nur Zeit.
+    </p>
+
+    <div class="karte">
+      <div class="feld-reihe">
+        <div class="feld">
+          <label for="js-was">Wonach suchen?</label>
+          <input id="js-was" type="text" placeholder="z. B. Disponent Logistik — leer lassen für „passend zum Profil“">
+        </div>
+        <div class="feld">
+          <label for="js-wo">Wo?</label>
+          <input id="js-wo" type="text" placeholder="z. B. Bremen, Umkreis 50 km">
+        </div>
+      </div>
+      <div class="neu-zeile">
+        <button class="knopf" id="js-starten">Stellen suchen</button>
+        <span class="notiz" id="js-status"></span>
+      </div>
+      <p class="notiz">Eine Suche dauert ein bis zwei Minuten und kostet etwa 10–20 Cent.</p>
+    </div>
+
+    <div id="js-ergebnis"></div>
+  </section>
+
   <!-- ============ PROFIL ============ -->
   <section class="ansicht" id="ansicht-profil" hidden>
     <h1 id="profil-titel">Profil</h1>
@@ -93,6 +124,24 @@
         </div>
       </div>
       <p class="notiz" id="profil-anzahl"></p>
+    </div>
+
+    <h2>Bewerbungsfoto</h2>
+    <div class="karte">
+      <p class="notiz" style="margin:0 0 10px">
+        In Deutschland üblich, rechtlich aber nicht vorgeschrieben — ohne Foto
+        ist der Lebenslauf genauso gültig. JPG oder PNG, hochkant, bis 8 MB.
+        Das Bild bleibt auf diesem Rechner und wird fest in die PDF eingebettet.
+      </p>
+      <div class="foto-zeile">
+        <div id="foto-vorschau" class="foto-rahmen"></div>
+        <div class="feld-knoepfe">
+          <input type="file" id="foto-datei" accept="image/jpeg,image/png" hidden>
+          <button type="button" class="knopf leise" id="foto-waehlen">Bild auswählen</button>
+          <button type="button" class="knopf gefahr" id="foto-entfernen">Entfernen</button>
+        </div>
+      </div>
+      <p class="notiz" id="foto-status"></p>
     </div>
 
     <h2>Persönliche Daten</h2>

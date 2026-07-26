@@ -275,6 +275,76 @@ def profil_anlegen(name: str, daten: dict | None = None) -> dict:
     return profil
 
 
+# --------------------------------------------------------------------------- #
+# Bewerbungsfoto
+# --------------------------------------------------------------------------- #
+
+# Erkennung an den ersten Bytes statt am Dateinamen: Wie eine Datei heisst,
+# sagt nichts darueber, was drinsteht. Nur diese beiden Formate, weil nur sie
+# in jedem PDF-Betrachter zuverlaessig ankommen.
+BILDARTEN = (
+    (b"\xff\xd8\xff", "jpg", "image/jpeg"),
+    (b"\x89PNG\r\n\x1a\n", "png", "image/png"),
+)
+FOTO_MAX = 8 * 1024 * 1024
+
+
+def foto_pfad(profil_id: str) -> Path | None:
+    for _, endung, _ in BILDARTEN:
+        pfad = PROFILE / f"{profil_id}-foto.{endung}"
+        if pfad.is_file():
+            return pfad
+    return None
+
+
+def foto_speichern(profil_id: str, rohdaten: bytes) -> str:
+    """Legt das Bewerbungsfoto ab. Gibt die Endung zurueck."""
+    if not rohdaten:
+        raise ValueError("Es wurden keine Bilddaten empfangen.")
+    if len(rohdaten) > FOTO_MAX:
+        raise ValueError("Das Bild ist groesser als 8 MB. Bitte ein kleineres "
+                         "waehlen - fuer den Lebenslauf genuegt eine kleine Datei.")
+    for kennung, endung, _ in BILDARTEN:
+        if rohdaten.startswith(kennung):
+            break
+    else:
+        raise ValueError("Nur JPG und PNG werden unterstuetzt. Andere Formate "
+                         "erscheinen im PDF nicht zuverlaessig.")
+    with _lock:
+        _profil_pfad(profil_id)  # Gegenprobe auf die Form der ID
+        PROFILE.mkdir(parents=True, exist_ok=True)
+        # Erst das alte in jedem Format entfernen, sonst liegen nach einem
+        # Wechsel von PNG auf JPG beide da und es gilt das falsche.
+        foto_loeschen(profil_id)
+        (PROFILE / f"{profil_id}-foto.{endung}").write_bytes(rohdaten)
+    return endung
+
+
+def foto_loeschen(profil_id: str) -> bool:
+    weg = False
+    for _, endung, _ in BILDARTEN:
+        pfad = PROFILE / f"{profil_id}-foto.{endung}"
+        if pfad.is_file():
+            pfad.unlink()
+            weg = True
+    return weg
+
+
+def foto_als_datenadresse(profil_id: str) -> str:
+    """Das Foto als eingebettete Datenadresse fuer die HTML-Vorlage.
+
+    Eingebettet statt verlinkt, damit das Dokument eine einzelne Datei bleibt -
+    ein Lebenslauf, dessen Bild beim Verschieben verschwindet, waere schlimmer
+    als gar keines.
+    """
+    pfad = foto_pfad(profil_id)
+    if not pfad:
+        return ""
+    typ = next(t for _, e, t in BILDARTEN if pfad.suffix.lstrip(".") == e)
+    import base64  # noqa: PLC0415
+    return f"data:{typ};base64," + base64.b64encode(pfad.read_bytes()).decode("ascii")
+
+
 def profil_waehlen(profil_id: str) -> bool:
     with _lock:
         if not _profil_pfad(profil_id).is_file():
@@ -296,6 +366,7 @@ def profil_loeschen(profil_id: str) -> bool:
         if not pfad.is_file() or len(list(PROFILE.glob("*.json"))) <= 1:
             return False
         pfad.unlink()
+        foto_loeschen(profil_id)
         if (_lade(ZUSTAND, {}) or {}).get("aktives_profil") == profil_id:
             rest = sorted(PROFILE.glob("*.json"))
             _speichere(ZUSTAND, {"aktives_profil": rest[0].stem if rest else ""})

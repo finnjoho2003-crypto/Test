@@ -200,7 +200,10 @@ def _lauf(bewerbung_id: str, anzeigentext: str | None) -> None:
         person = profil.get("person", {})
         ort = (person.get("plz_ort", "").split(maxsplit=1) or [""])[-1] or person.get("plz_ort", "")
         (ordner / "lebenslauf.html").write_text(
-            dokumente.baue_lebenslauf(unterlagen["lebenslauf"], person, ort), encoding="utf-8")
+            dokumente.baue_lebenslauf(
+                unterlagen["lebenslauf"], person, ort,
+                speicher.foto_als_datenadresse(eintrag.get("profil_id", ""))),
+            encoding="utf-8")
         (ordner / "anschreiben.html").write_text(
             dokumente.baue_anschreiben(unterlagen["anschreiben"], person, analyse, ort),
             encoding="utf-8")

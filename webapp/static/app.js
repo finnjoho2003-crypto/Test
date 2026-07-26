@@ -14,7 +14,7 @@ const STATUS_TEXT = {
 // Muss mit API_STAND in server.py uebereinstimmen. Passt es nicht, laeuft der
 // Dienst noch in einer aelteren Fassung als diese Oberflaeche - siehe die
 // Erklaerung an der Konstante dort.
-const BENOETIGTER_STAND = 3;
+const BENOETIGTER_STAND = 4;
 
 let zustand = { ansicht: "uebersicht", offen: null, timer: null };
 
@@ -77,6 +77,7 @@ function routen() {
   }
   zustand.offen = null;
   if (ziel === "profil") { zeige("profil"); ladeProfil(); return; }
+  if (ziel === "jobsuche") { zeige("jobsuche"); return; }
   zeige("uebersicht");
   ladeUebersicht();
 }
@@ -672,6 +673,146 @@ function markdown(roh) {
   return aus.join("\n");
 }
 
+
+/* ---------------------------------------------------------------- Jobsuche */
+
+// Die Suche laeuft ueber das Websuch-Werkzeug des Modells und dauert ein bis
+// zwei Minuten. Ohne sichtbaren Fortschritt wirkt das wie ein Absturz -
+// deshalb laeuft waehrenddessen eine Uhr mit.
+let jsLaeuft = false;
+
+$("#js-starten").addEventListener("click", async () => {
+  if (jsLaeuft) return;
+  jsLaeuft = true;
+  const knopf = $("#js-starten");
+  const status = $("#js-status");
+  knopf.disabled = true;
+  $("#js-ergebnis").innerHTML = "";
+
+  const start = Date.now();
+  const uhr = setInterval(() => {
+    const s = Math.round((Date.now() - start) / 1000);
+    status.textContent = `Es wird gesucht … (${s} s)`;
+  }, 1000);
+  status.textContent = "Es wird gesucht … (0 s)";
+
+  try {
+    const daten = await hole("/api/jobsuche", {
+      method: "POST",
+      body: JSON.stringify({ was: $("#js-was").value, wo: $("#js-wo").value }),
+    });
+    zeigeTreffer(daten);
+    status.textContent = `${(daten.stellen || []).length} Treffer.`;
+  } catch (fehler) {
+    $("#js-ergebnis").innerHTML =
+      `<div class="hinweis warnung"><p>${esc(fehler.message)}</p></div>`;
+    status.textContent = "";
+  } finally {
+    clearInterval(uhr);
+    knopf.disabled = false;
+    jsLaeuft = false;
+  }
+});
+
+function zeigeTreffer(daten) {
+  const stellen = daten.stellen || [];
+  let html = "";
+  if (daten.hinweis) {
+    html += `<div class="hinweis"><p>${esc(daten.hinweis)}</p></div>`;
+  }
+  if (!stellen.length) {
+    html += `<div class="leer">Nichts gefunden. Andere Bezeichnung oder größerer
+             Umkreis hilft oft — viele Jobbörsen sperren automatische Zugriffe.</div>`;
+    $("#js-ergebnis").innerHTML = html;
+    return;
+  }
+
+  // Bewusst dieselben Bausteine wie in der Bewerbungsliste - eine zweite
+  // Kartenform fuer denselben Zweck macht die Oberflaeche nur unruhiger.
+  html += `<h2>Gefundene Stellen</h2><div class="liste">` + stellen.map((s, i) => `
+    <div class="treffer">
+      <div class="treffer-kopf">
+        <div class="eintrag-text">
+          <div class="eintrag-titel">${esc(s.titel)}</div>
+          <div class="eintrag-meta">${esc([s.firma, s.ort, s.quelle].filter(Boolean).join(" · "))}</div>
+        </div>
+        <span class="abzeichen st-${s.passung === "hoch" ? "zusage" : s.passung === "niedrig" ? "absage" : "gesendet"}">Passung ${esc(s.passung)}</span>
+      </div>
+      <p class="knapp-text">${esc(s.warum_passend)}</p>
+      ${s.haken ? `<p class="knapp-text" style="color:var(--text-still)"><strong>Zu bedenken:</strong> ${esc(s.haken)}</p>` : ""}
+      <div class="neu-zeile" style="margin-top:11px">
+        ${s.url ? `<a class="knopf leise" href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">Anzeige öffnen</a>` : ""}
+        ${s.url ? `<button class="knopf" data-bewerben="${i}">Unterlagen erstellen</button>` : ""}
+      </div>
+    </div>`).join("") + `</div>`;
+
+  $("#js-ergebnis").innerHTML = html;
+
+  // Direkt aus dem Treffer heraus bewerben - der Umweg über Kopieren und
+  // Einfügen der Adresse ist genau die Stelle, an der man es dann doch lässt.
+  $$("#js-ergebnis [data-bewerben]").forEach((knopf) =>
+    knopf.addEventListener("click", async () => {
+      const stelle = stellen[Number(knopf.dataset.bewerben)];
+      knopf.disabled = true;
+      knopf.textContent = "wird angelegt …";
+      try {
+        const eintrag = await hole("/api/bewerbungen", {
+          method: "POST", body: JSON.stringify({ url: stelle.url }),
+        });
+        location.hash = `#/bewerbung/${eintrag.id}`;
+      } catch (fehler) {
+        alert(fehler.message);
+        knopf.disabled = false;
+        knopf.textContent = "Unterlagen erstellen";
+      }
+    }));
+}
+
+/* -------------------------------------------------------------- Foto */
+
+function zeigeFoto(vorhanden) {
+  // Zeitstempel gegen den Browser-Zwischenspeicher: Ohne ihn zeigt die
+  // Vorschau nach einem Wechsel weiter das alte Bild.
+  $("#foto-vorschau").innerHTML = vorhanden
+    ? `<img src="/api/profil/foto?t=${Date.now()}" alt="Bewerbungsfoto">`
+    : `<span class="foto-leer">kein Foto</span>`;
+  $("#foto-entfernen").disabled = !vorhanden;
+}
+
+$("#foto-waehlen").addEventListener("click", () => $("#foto-datei").click());
+
+$("#foto-datei").addEventListener("change", async (e) => {
+  const datei = e.target.files && e.target.files[0];
+  if (!datei) return;
+  const status = $("#foto-status");
+  if (datei.size > 8 * 1024 * 1024) {
+    status.textContent = "Das Bild ist größer als 8 MB. Bitte ein kleineres wählen.";
+    return;
+  }
+  status.textContent = "Bild wird übertragen …";
+  try {
+    const daten = await new Promise((fertig, schief) => {
+      const leser = new FileReader();
+      leser.onload = () => fertig(leser.result);
+      leser.onerror = () => schief(new Error("Die Datei ließ sich nicht lesen."));
+      leser.readAsDataURL(datei);
+    });
+    await hole("/api/profil/foto", { method: "POST", body: JSON.stringify({ bild: daten }) });
+    zeigeFoto(true);
+    status.textContent = "Foto gespeichert. Es erscheint in allen neu erstellten Lebensläufen.";
+  } catch (fehler) {
+    status.textContent = fehler.message;
+  } finally {
+    e.target.value = "";
+  }
+});
+
+$("#foto-entfernen").addEventListener("click", async () => {
+  await fetch("/api/profil/foto", { method: "DELETE" });
+  zeigeFoto(false);
+  $("#foto-status").textContent = "Foto entfernt.";
+});
+
 /* ------------------------------------------------------------------ Profil */
 
 const LISTEN = {
@@ -769,6 +910,7 @@ async function ladeProfil() {
   if (titel) titel.textContent = profilDaten.name || "Profil";
   const namensfeld = $("#p-name");
   if (namensfeld) namensfeld.value = profilDaten.name || "";
+  zeigeFoto(Boolean(profilDaten.hat_foto));
   const p = profilDaten.person || {}, s = profilDaten.situation || {};
   for (const [feld, wert] of Object.entries(p)) {
     const el = $(`#p-${feld}`); if (el) el.value = wert || "";

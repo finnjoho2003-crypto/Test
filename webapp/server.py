@@ -33,7 +33,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kern import claude, pipeline, speicher  # noqa: E402
 
 STATIC = Path(__file__).resolve().parent / "static"
-MAX_BODY = 4 * 1024 * 1024
+# Grosszuegig wegen der Bewerbungsfotos: Ein 8-MB-Bild wird als Datenadresse
+# uebertragen und waechst dabei um ein Drittel.
+MAX_BODY = 16 * 1024 * 1024
 
 # Muss mit BENOETIGTER_STAND in static/app.js uebereinstimmen.
 #
@@ -43,7 +45,7 @@ MAX_BODY = 4 * 1024 * 1024
 # Dienst - und ein Aufruf, den es hier noch nicht gibt, endet in einem nackten
 # 404, das nach einem kaputten Programm aussieht. Hochzaehlen, sobald die
 # Oberflaeche etwas braucht, das der Dienst vorher nicht konnte.
-API_STAND = 3
+API_STAND = 4
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -117,6 +119,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True})
             return self._fehler("Nicht gefunden", 404)
 
+        if self.path == "/api/profil/foto":
+            speicher.foto_loeschen(speicher.aktives_profil_id())
+            return self._json({"ok": True})
+
         treffer = re.fullmatch(r"/api/profile/([0-9a-f]+)", self.path)
         if treffer:
             if speicher.profil_loeschen(treffer.group(1)):
@@ -154,11 +160,20 @@ class Handler(BaseHTTPRequestHandler):
             })
 
         if pfad == "/api/profil":
-            return self._json(speicher.profil_lesen())
+            profil = speicher.profil_lesen()
+            return self._json(profil | {"hat_foto": bool(
+                speicher.foto_pfad(speicher.aktives_profil_id()))})
 
         if pfad == "/api/profile":
             return self._json({"profile": speicher.profile_liste(),
                                "aktiv": speicher.aktives_profil_id()})
+
+        if pfad == "/api/profil/foto":
+            bild = speicher.foto_pfad(speicher.aktives_profil_id())
+            if not bild:
+                return self._fehler("Kein Foto hinterlegt", 404)
+            typ = "image/jpeg" if bild.suffix == ".jpg" else "image/png"
+            return self._senden(200, bild.read_bytes(), typ)
 
         treffer = re.fullmatch(r"/api/bewerbungen/([0-9a-f]+)", pfad)
         if treffer:
@@ -214,6 +229,27 @@ class Handler(BaseHTTPRequestHandler):
         if pfad == "/api/profil":
             return self._json(speicher.profil_schreiben(koerper))
 
+        if pfad == "/api/jobsuche":
+            if not speicher.schluessel_vorhanden():
+                return self._fehler("Für die Jobsuche wird der API-Schlüssel "
+                                    "gebraucht. Er lässt sich oben eintragen.", 409)
+            profil = speicher.profil_lesen()
+            fehlt = speicher.profil_vollstaendig(profil)
+            if fehlt:
+                return self._fehler(
+                    "Ohne Profil lässt sich nicht sinnvoll suchen. Es fehlt noch: "
+                    + ", ".join(fehlt) + ".", 409)
+            try:
+                return self._json(claude.suche_stellen(
+                    profil,
+                    (koerper.get("was") or "").strip(),
+                    (koerper.get("wo") or "").strip(),
+                    min(int(koerper.get("anzahl") or 8), 15)))
+            except RuntimeError as fehler:
+                return self._fehler(str(fehler), 502)
+            except Exception as fehler:  # noqa: BLE001
+                return self._fehler(claude.klartext(fehler), 502)
+
         if pfad == "/api/profile":
             name = (koerper.get("name") or "").strip()
             if not name:
@@ -224,6 +260,19 @@ class Handler(BaseHTTPRequestHandler):
             vorlage = (koerper.get("kopie_von") or "").strip()
             daten = speicher.profil_lesen(vorlage) if vorlage else None
             return self._json(speicher.profil_anlegen(name, daten), 201)
+
+        if pfad == "/api/profil/foto":
+            # Als Datenadresse aus dem Browser - das spart eine Formular-
+            # Kodierung im Server und kostet nur ein Drittel mehr Uebertragung.
+            roh = (koerper.get("bild") or "")
+            roh = roh.split(",", 1)[-1] if roh.startswith("data:") else roh
+            import base64  # noqa: PLC0415
+            try:
+                daten = base64.b64decode(roh, validate=True)
+            except Exception:  # noqa: BLE001
+                return self._fehler("Die Bilddaten waren unvollständig.")
+            speicher.foto_speichern(speicher.aktives_profil_id(), daten)
+            return self._json({"ok": True})
 
         treffer = re.fullmatch(r"/api/profile/([0-9a-f]+)/waehlen", pfad)
         if treffer:
