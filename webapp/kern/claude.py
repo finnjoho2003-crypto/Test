@@ -494,6 +494,156 @@ Hilfe."""
 
 
 # --------------------------------------------------------------------------- #
+# Uebungsgespraech: Gegenueber und Auswertung
+# --------------------------------------------------------------------------- #
+
+def _gespraech_system(analyse: dict, profil: dict, titel: str, firma: str) -> str:
+    tonalitaet = analyse.get("tonalitaet") or "sie-formell"
+    person = profil.get("person", {})
+    return f"""Du fuehrst ein Vorstellungsgespraech. Du bist die Person, die
+einstellt - nicht ein Assistent, der jemandem hilft.
+
+Rolle: Personalverantwortliche bei {firma or 'der Firma'}, Gespraech ueber die
+Stelle "{titel or 'die ausgeschriebene Position'}".
+Anrede: {'du' if tonalitaet == 'du' else 'Sie'}.
+
+So fuehrst du das Gespraech:
+- Eine Frage pro Nachricht. Zwei Fragen auf einmal sind im echten Gespraech
+  selten und machen die Uebung wertlos, weil nur die zweite beantwortet wird.
+- Kurz. Zwei bis vier Saetze. Du bist nicht hier, um Vortraege zu halten.
+- Du hoerst zu. Beziehe dich auf das, was gerade gesagt wurde, bevor du
+  weiterfragst. Bleibt eine Antwort vage oder ohne Beispiel, hakst du nach -
+  genau einmal, dann gehst du weiter.
+- Der Ablauf ist der uebliche: Begruessung und "Erzaehlen Sie etwas ueber
+  sich", dann Werdegang, dann fachliche Tiefe, dann Verhaltensfragen
+  (schwieriges Projekt, Konflikt), dann Wechselgrund, dann Gehalt, zuletzt
+  Rueckfragen. Halte dich daran, aber nicht stur - folge dem Gespraech.
+- Bleib in der Rolle. Kein Lob, keine Tipps, keine Bewertung waehrend des
+  Gespraechs. Die Auswertung kommt danach und getrennt.
+- Sei freundlich, aber nicht gefaellig. Ein Gegenueber, das alles gut findet,
+  bereitet auf nichts vor.
+- Frage nichts Unzulaessiges (Familienplanung, Religion, Gesundheit,
+  Parteizugehoerigkeit). Wenn die Person von sich aus davon anfaengt, gehst du
+  darueber hinweg.
+
+Du kennst die Unterlagen der Person - stelle also Fragen, die sich daraus
+ergeben, statt allgemeiner Standardfragen. Luecken und Bruecke im Werdegang
+darfst du ansprechen; das ist der Sinn der Uebung.
+
+Beginne mit einer kurzen Begruessung und der ersten Frage.
+
+BEWERBUNGSUNTERLAGEN (dein Wissensstand):
+{json.dumps({'analyse': analyse, 'profil': profil, 'name': f"{person.get('vorname', '')} {person.get('nachname', '')}".strip()}, ensure_ascii=False, indent=2)[:40000]}"""
+
+
+def gespraech_antwort(analyse: dict, profil: dict, titel: str, firma: str,
+                      verlauf: list) -> str:
+    """Die naechste Aeusserung des Gegenuebers."""
+    nachrichten = [{"role": "assistant" if z["rolle"] == "recruiter" else "user",
+                    "content": z["text"]} for z in verlauf]
+    # Ohne eroeffnende Nutzernachricht lehnt die API ab; beim allerersten
+    # Aufruf gibt es aber noch nichts zu antworten.
+    if not nachrichten or nachrichten[0]["role"] != "user":
+        nachrichten.insert(0, {"role": "user", "content": "Guten Tag."})
+
+    with client().messages.stream(
+        model=MODELL,
+        max_tokens=2000,
+        system=_gespraech_system(analyse, profil, titel, firma),
+        thinking={"type": "adaptive"},
+        # Bewusst niedrig: Ein Gegenueber, das zehn Sekunden ueberlegt, zerstoert
+        # den Rhythmus eines Gespraechs - und Ueberlegen hilft hier wenig.
+        output_config={"effort": "low"},
+        messages=nachrichten,
+    ) as stream:
+        antwort = stream.get_final_message()
+
+    if antwort.stop_reason == "refusal":
+        raise RuntimeError("Die Antwort wurde abgelehnt. Bitte anders formulieren.")
+    return "\n".join(b.text for b in antwort.content if b.type == "text").strip()
+
+
+FEEDBACK_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "gesamteindruck": {"type": "string",
+                           "description": "Drei bis fuenf Saetze, ehrlich"},
+        "einschaetzung": {"type": "string",
+                          "enum": ["ueberzeugend", "solide", "ausbaufaehig"]},
+        "stark": {
+            "type": "array",
+            "description": "Was gut lief - mit Zitat aus dem Gespraech",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "punkt": {"type": "string"},
+                    "zitat": {"type": "string", "description": "Woertlich aus der Antwort"},
+                    "warum": {"type": "string"},
+                },
+                "required": ["punkt", "zitat", "warum"],
+                "additionalProperties": False,
+            },
+        },
+        "schwach": {
+            "type": "array",
+            "description": "Was schlecht lief - immer mit besserer Fassung",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "punkt": {"type": "string"},
+                    "zitat": {"type": "string"},
+                    "warum": {"type": "string"},
+                    "besser": {"type": "string",
+                               "description": "Konkret ausformuliert, aus dem Material der Person"},
+                },
+                "required": ["punkt", "zitat", "warum", "besser"],
+                "additionalProperties": False,
+            },
+        },
+        "naechstes_mal": {
+            "type": "array",
+            "description": "Hoechstens drei Dinge, auf die zu achten ist",
+            "items": {"type": "string"},
+        },
+    },
+    "required": ["gesamteindruck", "einschaetzung", "stark", "schwach", "naechstes_mal"],
+    "additionalProperties": False,
+}
+
+
+def gespraech_feedback(analyse: dict, profil: dict, verlauf: list) -> dict:
+    system = f"""{GRUNDREGEL}
+
+Werte jetzt ein Uebungsgespraech aus. Du sprichst zu der Person, die geuebt hat.
+
+Sei ehrlich. Eine Auswertung, in der alles gut war, hilft niemandem und kostet
+im echten Gespraech die Stelle. Umgekehrt gilt: Jede Kritik braucht eine
+konkrete bessere Fassung - "war zu vage" allein ist keine Hilfe.
+
+Belege alles mit woertlichen Zitaten aus dem Verlauf. Erfinde keine Aussage,
+die nicht gefallen ist.
+
+Die besseren Fassungen baust du ausschliesslich aus dem, was im Profil steht.
+Lege der Person keine Erfahrung in den Mund, die sie nicht hat - sie muesste
+den Satz im echten Gespraech sagen koennen.
+
+Achte besonders auf: konkrete Beispiele statt Behauptungen, Zahlen, Struktur
+der Antwort (Situation, Handlung, Ergebnis), Umgang mit unangenehmen Fragen,
+Schlechtreden frueherer Arbeitgeber, Laenge der Antworten.
+
+War das Gespraech sehr kurz, sag das und werte nur, was da ist."""
+
+    inhalt = (
+        "STELLENANALYSE:\n" + json.dumps(analyse, ensure_ascii=False, indent=2)
+        + "\n\nPROFIL:\n" + json.dumps(profil, ensure_ascii=False, indent=2)
+        + "\n\nGESPRAECHSVERLAUF:\n"
+        + "\n\n".join(f"{'GEGENUEBER' if z['rolle'] == 'recruiter' else 'BEWERBER'}: {z['text']}"
+                      for z in verlauf)
+    )
+    return _json_antwort(system, inhalt, FEEDBACK_SCHEMA, max_tokens=16000)
+
+
+# --------------------------------------------------------------------------- #
 # 3. Gespraechsvorbereitung
 # --------------------------------------------------------------------------- #
 

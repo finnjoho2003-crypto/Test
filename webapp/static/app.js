@@ -14,7 +14,7 @@ const STATUS_TEXT = {
 // Muss mit API_STAND in server.py uebereinstimmen. Passt es nicht, laeuft der
 // Dienst noch in einer aelteren Fassung als diese Oberflaeche - siehe die
 // Erklaerung an der Konstante dort.
-const BENOETIGTER_STAND = 4;
+const BENOETIGTER_STAND = 5;
 
 let zustand = { ansicht: "uebersicht", offen: null, timer: null };
 
@@ -49,6 +49,11 @@ function abzeichen(status) {
 /* ------------------------------------------------------------- Navigation */
 
 function zeige(ansicht) {
+  // Stimme und Mikrofon gehoeren zur Gespraechsansicht. Laufen sie weiter,
+  // waehrend jemand das Profil bearbeitet, ist das schlicht unheimlich.
+  if (zustand.ansicht === "gespraech" && ansicht !== "gespraech") {
+    stimmeAus(); hoerenBeenden();
+  }
   zustand.ansicht = ansicht;
   $$(".ansicht").forEach((el) => (el.hidden = el.id !== `ansicht-${ansicht}`));
   $$("nav button").forEach((b) =>
@@ -78,6 +83,12 @@ function routen() {
   zustand.offen = null;
   if (ziel === "profil") { zeige("profil"); ladeProfil(); return; }
   if (ziel === "jobsuche") { zeige("jobsuche"); return; }
+  if (ziel === "gespraech") {
+    zeige("gespraech");
+    // Ein weiterlaufender Sprecher beim Verlassen der Ansicht waere gruselig.
+    if ($("#g-lauf").hidden) ladeGespraeche();
+    return;
+  }
   zeige("uebersicht");
   ladeUebersicht();
 }
@@ -811,6 +822,312 @@ $("#foto-entfernen").addEventListener("click", async () => {
   await fetch("/api/profil/foto", { method: "DELETE" });
   zeigeFoto(false);
   $("#foto-status").textContent = "Foto entfernt.";
+});
+
+
+/* ------------------------------------------------------------- Übungsgespräch */
+
+/* Sprache läuft im Browser, nicht über die API.
+   Anthropics Schnittstelle kennt weder Sprachein- noch -ausgabe — sie nimmt
+   Text (und Bilder) und gibt Text zurück. Die Sprachfunktion der Claude-App
+   ist Teil dieser App, nicht der Schnittstelle. Beides steckt aber ohnehin
+   im Browser: SpeechSynthesis liest vor, SpeechRecognition hört zu. Das
+   kostet nichts extra und die Aufnahme verlässt den Rechner nur bei der
+   Erkennung. */
+
+const Erkennung = window.SpeechRecognition || window.webkitSpeechRecognition;
+const kannHoeren = Boolean(Erkennung);
+// Auf den Wert pruefen, nicht auf die Existenz: In manchen Umgebungen ist
+// die Eigenschaft vorhanden, aber undefiniert - dann waere jeder Zugriff
+// darauf ein Absturz mitten im Gespraech.
+const kannSprechen = Boolean(window.speechSynthesis
+  && typeof window.SpeechSynthesisUtterance === "function");
+
+let gZustand = { id: null, hoert: false, erkenner: null };
+
+function stimmeAus() {
+  if (kannSprechen) window.speechSynthesis.cancel();
+}
+
+function vorlesen(text) {
+  if (!kannSprechen || !$("#g-vorlesen").checked) return;
+  stimmeAus();
+  const spruch = new SpeechSynthesisUtterance(text);
+  spruch.lang = "de-DE";
+  spruch.rate = 1.02;
+  // Eine deutsche Stimme, falls vorhanden - sonst liest das System den
+  // deutschen Text mit englischer Aussprache vor, was unfreiwillig komisch ist.
+  const stimme = window.speechSynthesis.getVoices()
+    .find((s) => s.lang && s.lang.toLowerCase().startsWith("de"));
+  if (stimme) spruch.voice = stimme;
+  window.speechSynthesis.speak(spruch);
+}
+
+function sprachhinweis() {
+  const ziel = $("#g-sprachhinweis");
+  if (!ziel) return;
+  if (kannHoeren && kannSprechen) { ziel.innerHTML = ""; return; }
+  const fehlt = [];
+  if (!kannHoeren) fehlt.push("Zuhören (Mikrofon)");
+  if (!kannSprechen) fehlt.push("Vorlesen");
+  ziel.innerHTML = `
+    <div class="hinweis">
+      <p><strong>In diesem Browser fehlt: ${esc(fehlt.join(" und "))}.</strong></p>
+      <p>Die Sprachfunktion steckt im Browser, nicht im Assistenten. Am
+         zuverlässigsten läuft sie in <strong>Chrome</strong> oder
+         <strong>Edge</strong> über die weitergeleitete Adresse
+         (<code>https://…app.github.dev</code>) — im Vorschaufenster des
+         Editors bekommt die Seite kein Mikrofon.</p>
+      <p>Tippen geht immer und ist genauso gültig.</p>
+    </div>`;
+}
+
+function hoerenStarten() {
+  if (!kannHoeren) {
+    $("#g-status").textContent =
+      "Dieser Browser kann nicht zuhören. In Chrome oder Edge öffnen — oder tippen.";
+    return;
+  }
+  if (gZustand.hoert) { hoerenBeenden(); return; }
+
+  stimmeAus();  // Sonst hört das Mikrofon die eigene Stimme mit.
+  const erkenner = new Erkennung();
+  erkenner.lang = "de-DE";
+  erkenner.continuous = true;
+  erkenner.interimResults = true;
+
+  const vorher = $("#g-antwort").value;
+  let sicher = "";
+
+  erkenner.onresult = (ereignis) => {
+    let vorlaeufig = "";
+    for (let i = ereignis.resultIndex; i < ereignis.results.length; i++) {
+      const stueck = ereignis.results[i][0].transcript;
+      if (ereignis.results[i].isFinal) sicher += stueck;
+      else vorlaeufig += stueck;
+    }
+    // Erkanntes anhängen statt ersetzen - sonst ist Getipptes weg, sobald
+    // jemand zusätzlich das Mikrofon benutzt.
+    $("#g-antwort").value = (vorher + " " + sicher + vorlaeufig).trim();
+  };
+  erkenner.onerror = (ereignis) => {
+    const texte = {
+      "not-allowed": "Das Mikrofon wurde nicht freigegeben. Im Browser oben in der Adresszeile erlauben.",
+      "service-not-allowed": "Das Mikrofon wurde nicht freigegeben.",
+      "no-speech": "Nichts gehört. Noch einmal versuchen.",
+      "audio-capture": "Kein Mikrofon gefunden.",
+      "network": "Die Spracherkennung braucht eine Internetverbindung.",
+    };
+    $("#g-status").textContent = texte[ereignis.error] || `Spracherkennung: ${ereignis.error}`;
+    hoerenBeenden();
+  };
+  erkenner.onend = () => { if (gZustand.hoert) hoerenBeenden(); };
+
+  gZustand.erkenner = erkenner;
+  gZustand.hoert = true;
+  $("#g-mikro").textContent = "⏹ Fertig";
+  $("#g-mikro").classList.add("hoert");
+  $("#g-status").textContent = "Es wird zugehört … Zum Beenden noch einmal drücken.";
+  erkenner.start();
+}
+
+function hoerenBeenden() {
+  if (gZustand.erkenner) {
+    try { gZustand.erkenner.stop(); } catch (e) { /* schon beendet */ }
+  }
+  gZustand.erkenner = null;
+  gZustand.hoert = false;
+  const knopf = $("#g-mikro");
+  if (knopf) { knopf.textContent = "🎤 Sprechen"; knopf.classList.remove("hoert"); }
+  const status = $("#g-status");
+  if (status && status.textContent.startsWith("Es wird zugehört")) status.textContent = "";
+}
+
+async function ladeGespraeche() {
+  sprachhinweis();
+  let daten;
+  try { daten = await hole("/api/gespraeche"); }
+  catch (fehler) {
+    $("#g-liste").innerHTML = `<div class="hinweis warnung">${esc(fehler.message)}</div>`;
+    return;
+  }
+
+  const wahl = $("#g-bewerbung");
+  wahl.innerHTML = daten.bewerbungen.map((b) =>
+    `<option value="${esc(b.id)}">${esc(b.titel)}${b.firma ? " — " + esc(b.firma) : ""}</option>`
+  ).join("") + `<option value="">Andere Stelle (frei eintragen)</option>`;
+  // Ohne fertige Bewerbung bleibt nur der freie Modus - dann ihn gleich zeigen.
+  if (!daten.bewerbungen.length) wahl.value = "";
+  $("#g-frei").hidden = Boolean(wahl.value);
+
+  $("#g-liste").innerHTML = daten.gespraeche.length
+    ? daten.gespraeche.map((g) => `
+        <button class="eintrag" data-gespraech="${esc(g.id)}">
+          <div class="eintrag-text">
+            <div class="eintrag-titel">${esc(g.titel)}</div>
+            <div class="eintrag-meta">${esc([g.firma, g.profil_name,
+              `${g.runden} Antwort${g.runden === 1 ? "" : "en"}`, datum(g.erstellt)]
+              .filter(Boolean).join(" · "))}</div>
+          </div>
+          ${g.hat_feedback ? `<span class="abzeichen st-zusage">ausgewertet</span>` : ""}
+        </button>`).join("")
+    : `<div class="leer">Noch nichts geübt.</div>`;
+
+  $$("#g-liste [data-gespraech]").forEach((el) =>
+    el.addEventListener("click", () => oeffneGespraech(el.dataset.gespraech)));
+}
+
+$("#g-bewerbung").addEventListener("change", (e) => {
+  $("#g-frei").hidden = Boolean(e.target.value);
+});
+
+$("#g-starten").addEventListener("click", async () => {
+  const knopf = $("#g-starten");
+  const status = $("#g-startstatus");
+  knopf.disabled = true;
+  status.textContent = "Das Gegenüber bereitet sich vor …";
+  try {
+    const g = await hole("/api/gespraeche", {
+      method: "POST",
+      body: JSON.stringify({
+        bewerbung_id: $("#g-bewerbung").value,
+        titel: $("#g-titel").value,
+        firma: $("#g-firma").value,
+      }),
+    });
+    status.textContent = "";
+    zeigeGespraech(g, true);
+  } catch (fehler) {
+    status.textContent = fehler.message;
+  } finally {
+    knopf.disabled = false;
+  }
+});
+
+async function oeffneGespraech(id) {
+  try { zeigeGespraech(await hole(`/api/gespraeche/${id}`), false); }
+  catch (fehler) { alert(fehler.message); }
+}
+
+function zeigeGespraech(g, vorlesenLetzte) {
+  gZustand.id = g.id;
+  $("#g-start").hidden = true;
+  $("#g-lauf").hidden = false;
+  $("#g-stelle").textContent = g.titel || "Übungsgespräch";
+  $("#g-firma-anzeige").textContent = [g.firma, g.profil_name].filter(Boolean).join(" · ");
+
+  $("#g-verlauf").innerHTML = (g.verlauf || []).map((z) => `
+    <div class="g-zeile ${z.rolle === "ich" ? "g-ich" : "g-gegen"}">
+      <div class="g-wer">${z.rolle === "ich" ? "Ich" : "Gegenüber"}</div>
+      <div class="g-text">${esc(z.text).replace(/\n/g, "<br>")}</div>
+    </div>`).join("");
+
+  const letzte = $("#g-verlauf").lastElementChild;
+  if (letzte) letzte.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+  $("#g-feedback").innerHTML = g.feedback ? feedbackHtml(g.feedback) : "";
+
+  const letzteAeusserung = [...(g.verlauf || [])].reverse()
+    .find((z) => z.rolle === "recruiter");
+  if (vorlesenLetzte && letzteAeusserung) vorlesen(letzteAeusserung.text);
+}
+
+async function antwortSenden() {
+  const feld = $("#g-antwort");
+  const text = feld.value.trim();
+  if (!text) { $("#g-status").textContent = "Erst etwas sagen oder tippen."; return; }
+  hoerenBeenden();
+
+  const senden = $("#g-senden");
+  senden.disabled = true;
+  $("#g-status").textContent = "Das Gegenüber überlegt …";
+  try {
+    const g = await hole(`/api/gespraeche/${gZustand.id}/antwort`, {
+      method: "POST", body: JSON.stringify({ text }),
+    });
+    feld.value = "";
+    $("#g-status").textContent = "";
+    zeigeGespraech(g, true);
+  } catch (fehler) {
+    $("#g-status").textContent = fehler.message;
+  } finally {
+    senden.disabled = false;
+  }
+}
+
+$("#g-senden").addEventListener("click", antwortSenden);
+$("#g-mikro").addEventListener("click", hoerenStarten);
+$("#g-antwort").addEventListener("keydown", (e) => {
+  // Strg+Enter sendet - Enter allein bleibt der Absatzumbruch, weil Antworten
+  // hier mehrere Sätze lang sind.
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) antwortSenden();
+});
+
+$("#g-beenden").addEventListener("click", async () => {
+  hoerenBeenden();
+  stimmeAus();
+  const knopf = $("#g-beenden");
+  knopf.disabled = true;
+  $("#g-status").textContent = "Das Gespräch wird ausgewertet … (kann eine Minute dauern)";
+  try {
+    const g = await hole(`/api/gespraeche/${gZustand.id}/feedback`, { method: "POST" });
+    $("#g-status").textContent = "";
+    $("#g-feedback").innerHTML = feedbackHtml(g.feedback);
+    $("#g-feedback").scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (fehler) {
+    $("#g-status").textContent = fehler.message;
+  } finally {
+    knopf.disabled = false;
+  }
+});
+
+function feedbackHtml(f) {
+  if (!f) return "";
+  const farbe = f.einschaetzung === "ueberzeugend" ? "gut"
+    : f.einschaetzung === "ausbaufaehig" ? "warnung" : "";
+  const worte = { ueberzeugend: "überzeugend", solide: "solide", ausbaufaehig: "ausbaufähig" };
+
+  let html = `<h2>Auswertung</h2>
+    <div class="hinweis ${farbe}">
+      <p><strong>Gesamteindruck: ${esc(worte[f.einschaetzung] || f.einschaetzung)}</strong></p>
+      <p>${esc(f.gesamteindruck)}</p>
+    </div>`;
+
+  if ((f.stark || []).length) {
+    html += `<div class="karte"><h3>Das lief gut</h3><ul class="knapp">` +
+      f.stark.map((s) => `<li><strong>${esc(s.punkt)}</strong><br>
+        <span class="g-zitat">„${esc(s.zitat)}“</span><br>
+        <span style="color:var(--text-leise)">${esc(s.warum)}</span></li>`).join("") +
+      `</ul></div>`;
+  }
+  if ((f.schwach || []).length) {
+    html += `<div class="karte"><h3>Das würde im echten Gespräch Punkte kosten</h3><ul class="knapp">` +
+      f.schwach.map((s) => `<li><strong>${esc(s.punkt)}</strong><br>
+        <span class="g-zitat">„${esc(s.zitat)}“</span><br>
+        <span style="color:var(--text-leise)">${esc(s.warum)}</span><br>
+        <span class="g-besser"><strong>Besser:</strong> ${esc(s.besser)}</span></li>`).join("") +
+      `</ul></div>`;
+  }
+  if ((f.naechstes_mal || []).length) {
+    html += `<div class="karte"><h3>Beim nächsten Mal</h3><ul class="knapp">` +
+      f.naechstes_mal.map((p) => `<li>${esc(p)}</li>`).join("") + `</ul></div>`;
+  }
+  html += `<div class="neu-zeile" style="margin-top:16px">
+      <button class="knopf leise" id="g-zurueck">← Zur Übersicht der Übungen</button>
+    </div>`;
+  return html;
+}
+
+// Aus dem Feedback zurueck zur Liste - der Knopf entsteht erst mit dem HTML.
+document.addEventListener("click", (e) => {
+  if (e.target && e.target.id === "g-zurueck") {
+    stimmeAus();
+    hoerenBeenden();
+    $("#g-lauf").hidden = true;
+    $("#g-feedback").innerHTML = "";
+    $("#g-start").hidden = false;
+    ladeGespraeche();
+  }
 });
 
 /* ------------------------------------------------------------------ Profil */

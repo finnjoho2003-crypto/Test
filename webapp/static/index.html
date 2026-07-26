@@ -22,6 +22,7 @@
       <nav>
         <button data-ansicht="uebersicht" aria-current="page">Übersicht</button>
         <button data-ansicht="jobsuche">Jobsuche</button>
+        <button data-ansicht="gespraech">Gespräch</button>
         <button data-ansicht="profil">Profil</button>
       </nav>
     </div>
@@ -98,6 +99,73 @@
     </div>
 
     <div id="js-ergebnis"></div>
+  </section>
+
+  <!-- ============ ÜBUNGSGESPRÄCH ============ -->
+  <section class="ansicht" id="ansicht-gespraech" hidden>
+    <h1>Vorstellungsgespräch üben</h1>
+    <p class="unterzeile">
+      Das Gegenüber führt das Gespräch wie eine Person, die einstellt — es lobt
+      nicht und gibt zwischendurch keine Tipps. Die Auswertung kommt am Ende.
+    </p>
+
+    <div id="g-start">
+      <div class="karte">
+        <div class="feld">
+          <label for="g-bewerbung">Zu welcher Stelle?</label>
+          <select id="g-bewerbung"></select>
+        </div>
+        <div class="feld" id="g-frei" hidden>
+          <div class="feld-reihe">
+            <div class="feld"><label for="g-titel">Position</label>
+              <input id="g-titel" type="text" placeholder="z. B. Disponent Logistik"></div>
+            <div class="feld"><label for="g-firma">Firma (optional)</label>
+              <input id="g-firma" type="text" placeholder="z. B. Nord Logistik GmbH"></div>
+          </div>
+        </div>
+        <div class="neu-zeile">
+          <button class="knopf" id="g-starten">Gespräch beginnen</button>
+          <span class="notiz" id="g-startstatus"></span>
+        </div>
+      </div>
+
+      <div id="g-sprachhinweis"></div>
+
+      <h2>Frühere Übungen</h2>
+      <div class="liste" id="g-liste"></div>
+    </div>
+
+    <div id="g-lauf" hidden>
+      <div class="karte g-kopf">
+        <div>
+          <strong id="g-stelle"></strong>
+          <div class="eintrag-meta" id="g-firma-anzeige"></div>
+        </div>
+        <div class="feld-knoepfe">
+          <label class="schalter">
+            <input type="checkbox" id="g-vorlesen" checked>
+            <span>Vorlesen</span>
+          </label>
+          <button class="knopf leise" id="g-beenden">Beenden und auswerten</button>
+        </div>
+      </div>
+
+      <div class="g-verlauf" id="g-verlauf"></div>
+
+      <div class="karte g-eingabe">
+        <div class="neu-zeile" style="align-items:flex-start">
+          <textarea id="g-antwort" placeholder="Antwort eintippen — oder unten das Mikrofon benutzen."
+                    style="flex:1 1 320px;min-height:76px"></textarea>
+          <div class="feld-knoepfe" style="flex-direction:column">
+            <button class="knopf" id="g-senden">Antworten</button>
+            <button class="knopf leise" id="g-mikro">🎤 Sprechen</button>
+          </div>
+        </div>
+        <p class="notiz" id="g-status"></p>
+      </div>
+    </div>
+
+    <div id="g-feedback"></div>
   </section>
 
   <!-- ============ PROFIL ============ -->

@@ -481,6 +481,93 @@ def datei_pfad(bewerbung_id: str, name: str) -> Path:
     return _ordner(bewerbung_id) / sauber
 
 
+# --------------------------------------------------------------------------- #
+# Uebungsgespraeche
+# --------------------------------------------------------------------------- #
+
+GESPRAECHE = BASIS / "gespraeche"
+
+
+def _gespraech_pfad(gespraech_id: str) -> Path:
+    if not re.fullmatch(r"[0-9a-f]{8,32}", gespraech_id or ""):
+        raise ValueError("ungueltige Gespraechs-ID")
+    return GESPRAECHE / f"{gespraech_id}.json"
+
+
+def gespraech_anlegen(bewerbung_id: str, titel: str, firma: str) -> dict:
+    with _lock:
+        aktiv = aktives_profil_id()
+        eintrag = {
+            "id": uuid.uuid4().hex[:12],
+            "bewerbung_id": bewerbung_id,
+            "profil_id": aktiv,
+            "profil_name": profil_lesen(aktiv).get("name", "") if aktiv else "",
+            "titel": titel,
+            "firma": firma,
+            # Rollen: "recruiter" und "ich". Der komplette Verlauf bleibt
+            # erhalten - ohne ihn liesse sich am Ende nichts auswerten.
+            "verlauf": [],
+            "feedback": None,
+            "erstellt": _jetzt(),
+        }
+        GESPRAECHE.mkdir(parents=True, exist_ok=True)
+        _speichere(_gespraech_pfad(eintrag["id"]), eintrag)
+    return eintrag
+
+
+def gespraech_lesen(gespraech_id: str) -> dict | None:
+    return _lade(_gespraech_pfad(gespraech_id), None)
+
+
+def gespraech_aktualisieren(gespraech_id: str, **felder) -> dict | None:
+    with _lock:
+        eintrag = gespraech_lesen(gespraech_id)
+        if eintrag is None:
+            return None
+        eintrag.update(felder)
+        _speichere(_gespraech_pfad(gespraech_id), eintrag)
+    return eintrag
+
+
+def gespraech_ergaenzen(gespraech_id: str, rolle: str, text: str) -> dict | None:
+    with _lock:
+        eintrag = gespraech_lesen(gespraech_id)
+        if eintrag is None:
+            return None
+        eintrag["verlauf"].append({"rolle": rolle, "text": text, "zeit": _jetzt()})
+        _speichere(_gespraech_pfad(gespraech_id), eintrag)
+    return eintrag
+
+
+def gespraeche_liste() -> list[dict]:
+    if not GESPRAECHE.exists():
+        return []
+    eintraege = []
+    for pfad in GESPRAECHE.glob("*.json"):
+        daten = _lade(pfad, None)
+        if daten:
+            eintraege.append({
+                "id": daten.get("id", pfad.stem),
+                "titel": daten.get("titel", ""),
+                "firma": daten.get("firma", ""),
+                "profil_name": daten.get("profil_name", ""),
+                "runden": sum(1 for z in daten.get("verlauf", []) if z["rolle"] == "ich"),
+                "hat_feedback": bool(daten.get("feedback")),
+                "erstellt": daten.get("erstellt", ""),
+            })
+    eintraege.sort(key=lambda e: e.get("erstellt", ""), reverse=True)
+    return eintraege
+
+
+def gespraech_loeschen(gespraech_id: str) -> bool:
+    with _lock:
+        pfad = _gespraech_pfad(gespraech_id)
+        if not pfad.is_file():
+            return False
+        pfad.unlink()
+    return True
+
+
 def kennzahlen() -> dict:
     eintraege = bewerbungen_liste()
     nach_status = {s: 0 for s in STATUS}

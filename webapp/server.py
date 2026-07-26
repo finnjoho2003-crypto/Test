@@ -45,7 +45,7 @@ MAX_BODY = 16 * 1024 * 1024
 # Dienst - und ein Aufruf, den es hier noch nicht gibt, endet in einem nackten
 # 404, das nach einem kaputten Programm aussieht. Hochzaehlen, sobald die
 # Oberflaeche etwas braucht, das der Dienst vorher nicht konnte.
-API_STAND = 4
+API_STAND = 5
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -119,6 +119,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True})
             return self._fehler("Nicht gefunden", 404)
 
+        treffer = re.fullmatch(r"/api/gespraeche/([0-9a-f]+)", self.path)
+        if treffer:
+            if speicher.gespraech_loeschen(treffer.group(1)):
+                return self._json({"ok": True})
+            return self._fehler("Nicht gefunden", 404)
+
         if self.path == "/api/profil/foto":
             speicher.foto_loeschen(speicher.aktives_profil_id())
             return self._json({"ok": True})
@@ -167,6 +173,19 @@ class Handler(BaseHTTPRequestHandler):
         if pfad == "/api/profile":
             return self._json({"profile": speicher.profile_liste(),
                                "aktiv": speicher.aktives_profil_id()})
+
+        if pfad == "/api/gespraeche":
+            return self._json({"gespraeche": speicher.gespraeche_liste(),
+                               "bewerbungen": [
+                                   {"id": b["id"], "titel": b.get("titel", ""),
+                                    "firma": b.get("firma", "")}
+                                   for b in speicher.bewerbungen_liste()
+                                   if b.get("phase") == "fertig"]})
+
+        treffer = re.fullmatch(r"/api/gespraeche/([0-9a-f]+)", pfad)
+        if treffer:
+            eintrag = speicher.gespraech_lesen(treffer.group(1))
+            return self._json(eintrag) if eintrag else self._fehler("Nicht gefunden", 404)
 
         if pfad == "/api/profil/foto":
             bild = speicher.foto_pfad(speicher.aktives_profil_id())
@@ -228,6 +247,17 @@ class Handler(BaseHTTPRequestHandler):
 
         if pfad == "/api/profil":
             return self._json(speicher.profil_schreiben(koerper))
+
+        if pfad == "/api/gespraeche":
+            return self._gespraech_start(koerper)
+
+        treffer = re.fullmatch(r"/api/gespraeche/([0-9a-f]+)/antwort", pfad)
+        if treffer:
+            return self._gespraech_antwort(treffer.group(1), koerper)
+
+        treffer = re.fullmatch(r"/api/gespraeche/([0-9a-f]+)/feedback", pfad)
+        if treffer:
+            return self._gespraech_feedback(treffer.group(1))
 
         if pfad == "/api/jobsuche":
             if not speicher.schluessel_vorhanden():
@@ -331,6 +361,82 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True})
 
         return self._fehler("Unbekannter Pfad", 404)
+
+    # ----------------------------------------------------- Uebungsgespraech
+
+    def _gespraech_kontext(self, eintrag: dict) -> tuple[dict, dict]:
+        """Stellenanalyse und Profil zu einem Uebungsgespraech."""
+        bewerbung = speicher.bewerbung_lesen(eintrag["bewerbung_id"]) \
+            if eintrag.get("bewerbung_id") else None
+        analyse = (bewerbung or {}).get("analyse", {}) or {
+            "position": eintrag.get("titel", ""), "firma": eintrag.get("firma", ""),
+            "tonalitaet": "sie-formell", "muss": [], "kann": [],
+        }
+        return analyse, speicher.profil_lesen(eintrag.get("profil_id", ""))
+
+    def _gespraech_start(self, koerper: dict) -> None:
+        if not speicher.schluessel_vorhanden():
+            return self._fehler("Für das Übungsgespräch wird der API-Schlüssel "
+                                "gebraucht. Er lässt sich oben eintragen.", 409)
+        profil = speicher.profil_lesen()
+        fehlt = speicher.profil_vollstaendig(profil)
+        if fehlt:
+            return self._fehler(
+                "Ohne Profil kann das Gegenüber nichts fragen, was zu dir passt. "
+                "Es fehlt noch: " + ", ".join(fehlt) + ".", 409)
+
+        bewerbung_id = (koerper.get("bewerbung_id") or "").strip()
+        titel = (koerper.get("titel") or "").strip()
+        firma = (koerper.get("firma") or "").strip()
+        if bewerbung_id:
+            bewerbung = speicher.bewerbung_lesen(bewerbung_id)
+            if not bewerbung:
+                return self._fehler("Bewerbung nicht gefunden", 404)
+            titel = titel or bewerbung.get("titel", "")
+            firma = firma or bewerbung.get("firma", "")
+        if not titel:
+            return self._fehler("Bitte eine Stelle wählen oder die Position eintragen.")
+
+        eintrag = speicher.gespraech_anlegen(bewerbung_id, titel, firma)
+        analyse, profil = self._gespraech_kontext(eintrag)
+        try:
+            text = claude.gespraech_antwort(analyse, profil, titel, firma, [])
+        except Exception as fehler:  # noqa: BLE001
+            speicher.gespraech_loeschen(eintrag["id"])
+            return self._fehler(claude.klartext(fehler), 502)
+        return self._json(speicher.gespraech_ergaenzen(eintrag["id"], "recruiter", text), 201)
+
+    def _gespraech_antwort(self, gespraech_id: str, koerper: dict) -> None:
+        text = (koerper.get("text") or "").strip()
+        if not text:
+            return self._fehler("Es kam keine Antwort an. Bitte noch einmal.")
+        eintrag = speicher.gespraech_lesen(gespraech_id)
+        if not eintrag:
+            return self._fehler("Gespräch nicht gefunden", 404)
+
+        eintrag = speicher.gespraech_ergaenzen(gespraech_id, "ich", text)
+        analyse, profil = self._gespraech_kontext(eintrag)
+        try:
+            antwort = claude.gespraech_antwort(
+                analyse, profil, eintrag.get("titel", ""), eintrag.get("firma", ""),
+                eintrag["verlauf"])
+        except Exception as fehler:  # noqa: BLE001
+            return self._fehler(claude.klartext(fehler), 502)
+        return self._json(speicher.gespraech_ergaenzen(gespraech_id, "recruiter", antwort))
+
+    def _gespraech_feedback(self, gespraech_id: str) -> None:
+        eintrag = speicher.gespraech_lesen(gespraech_id)
+        if not eintrag:
+            return self._fehler("Gespräch nicht gefunden", 404)
+        if not any(z["rolle"] == "ich" for z in eintrag.get("verlauf", [])):
+            return self._fehler(
+                "Es wurde noch nichts geantwortet - da gibt es nichts auszuwerten.")
+        analyse, profil = self._gespraech_kontext(eintrag)
+        try:
+            feedback = claude.gespraech_feedback(analyse, profil, eintrag["verlauf"])
+        except Exception as fehler:  # noqa: BLE001
+            return self._fehler(claude.klartext(fehler), 502)
+        return self._json(speicher.gespraech_aktualisieren(gespraech_id, feedback=feedback))
 
     @staticmethod
     def _kurz(eintrag: dict) -> dict:

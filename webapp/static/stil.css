@@ -372,3 +372,40 @@ ul.knapp li { margin-bottom: 5px; }
    feste Zeilenhoehe die Uebersicht traegt. */
 .treffer .eintrag-titel { white-space: normal; }
 #js-ergebnis a.knopf { text-decoration: none; display: inline-block; }
+
+/* ---------- Übungsgespräch ---------- */
+.g-kopf { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; }
+.schalter { display: flex; align-items: center; gap: 6px; font-size: 13px;
+            color: var(--text-leise); margin: 0; cursor: pointer; }
+.schalter input { width: auto; }
+
+.g-verlauf { display: flex; flex-direction: column; gap: 12px; margin: 16px 0; }
+.g-zeile { max-width: 80%; }
+/* Wer gerade spricht, muss ohne Lesen erkennbar sein: Seite plus Beschriftung.
+   Nur die Seite genuegt nicht, wenn jemand mit Vorleseprogramm arbeitet. */
+.g-gegen { align-self: flex-start; }
+.g-ich { align-self: flex-end; }
+.g-wer { font-size: 11px; letter-spacing: .8px; text-transform: uppercase;
+         color: var(--text-still); margin-bottom: 4px; }
+.g-ich .g-wer { text-align: right; }
+.g-text {
+  background: var(--karte); border: 1px solid var(--rand);
+  border-radius: var(--radius); padding: 11px 14px; line-height: 1.6;
+}
+.g-gegen .g-text { border-left: 3px solid var(--gold); }
+.g-ich .g-text { background: var(--akzent-weich); border-color: transparent; }
+
+.g-eingabe { position: sticky; bottom: 12px; }
+/* Das Mikrofon pulsiert, solange zugehoert wird - ohne Rueckmeldung weiss
+   niemand, ob gerade aufgenommen wird. */
+button.knopf.hoert {
+  background: var(--absage); color: #fff; border-color: transparent;
+  animation: hoeren 1.4s ease-in-out infinite;
+}
+@keyframes hoeren { 50% { opacity: .62; } }
+
+.g-zitat { font-style: italic; color: var(--text); }
+.g-besser { color: var(--zusage); }
+
+@media (max-width: 640px) { .g-zeile { max-width: 100%; } }
+@media (prefers-reduced-motion: reduce) { button.knopf.hoert { animation: none; } }
