@@ -33,9 +33,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kern import claude, pipeline, speicher  # noqa: E402
 
 STATIC = Path(__file__).resolve().parent / "static"
-# Grosszuegig wegen der Bewerbungsfotos: Ein 8-MB-Bild wird als Datenadresse
-# uebertragen und waechst dabei um ein Drittel.
-MAX_BODY = 16 * 1024 * 1024
+# Grosszuegig wegen hochgeladener Dokumente: Ein eingescanntes Zeugnis oder
+# ein Lebenslauf mit 20 MB waechst als Datenadresse um ein Drittel, und es
+# duerfen mehrere Seiten auf einmal sein.
+MAX_BODY = 64 * 1024 * 1024
 
 # Muss mit BENOETIGTER_STAND in static/app.js uebereinstimmen.
 #
@@ -45,7 +46,7 @@ MAX_BODY = 16 * 1024 * 1024
 # Dienst - und ein Aufruf, den es hier noch nicht gibt, endet in einem nackten
 # 404, das nach einem kaputten Programm aussieht. Hochzaehlen, sobald die
 # Oberflaeche etwas braucht, das der Dienst vorher nicht konnte.
-API_STAND = 5
+API_STAND = 6
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -119,6 +120,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True})
             return self._fehler("Nicht gefunden", 404)
 
+        treffer = re.fullmatch(r"/api/zeugnisse/([0-9a-f]+)", self.path)
+        if treffer:
+            if speicher.zeugnis_loeschen(treffer.group(1)):
+                return self._json({"ok": True})
+            return self._fehler("Nicht gefunden", 404)
+
         treffer = re.fullmatch(r"/api/gespraeche/([0-9a-f]+)", self.path)
         if treffer:
             if speicher.gespraech_loeschen(treffer.group(1)):
@@ -173,6 +180,14 @@ class Handler(BaseHTTPRequestHandler):
         if pfad == "/api/profile":
             return self._json({"profile": speicher.profile_liste(),
                                "aktiv": speicher.aktives_profil_id()})
+
+        if pfad == "/api/zeugnisse":
+            return self._json({"zeugnisse": speicher.zeugnisse_liste()})
+
+        treffer = re.fullmatch(r"/api/zeugnisse/([0-9a-f]+)", pfad)
+        if treffer:
+            eintrag = speicher.zeugnis_lesen(treffer.group(1))
+            return self._json(eintrag) if eintrag else self._fehler("Nicht gefunden", 404)
 
         if pfad == "/api/gespraeche":
             return self._json({"gespraeche": speicher.gespraeche_liste(),
@@ -247,6 +262,15 @@ class Handler(BaseHTTPRequestHandler):
 
         if pfad == "/api/profil":
             return self._json(speicher.profil_schreiben(koerper))
+
+        if pfad == "/api/zeugnisse":
+            return self._zeugnis_pruefen(koerper)
+
+        if pfad == "/api/profil/import":
+            return self._lebenslauf_lesen(koerper)
+
+        if pfad == "/api/profil/import/uebernehmen":
+            return self._import_uebernehmen(koerper)
 
         if pfad == "/api/gespraeche":
             return self._gespraech_start(koerper)
@@ -361,6 +385,77 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True})
 
         return self._fehler("Unbekannter Pfad", 404)
+
+    # --------------------------------------------------- Hochgeladene Dateien
+
+    @staticmethod
+    def _dateien_aus(koerper: dict) -> list[bytes]:
+        """Holt die hochgeladenen Dateien als Bytes aus der Anfrage."""
+        import base64  # noqa: PLC0415
+        roh = koerper.get("dateien") or []
+        if not roh:
+            raise ValueError("Es kam keine Datei an.")
+        if len(roh) > 8:
+            raise ValueError("Höchstens acht Dateien auf einmal.")
+        dateien = []
+        for eintrag in roh:
+            wert = (eintrag.get("daten") or "")
+            wert = wert.split(",", 1)[-1] if wert.startswith("data:") else wert
+            try:
+                dateien.append(base64.b64decode(wert, validate=True))
+            except Exception as fehler:  # noqa: BLE001
+                raise ValueError(
+                    f"Die Datei „{eintrag.get('name', '?')}“ kam unvollständig an."
+                ) from fehler
+        return dateien
+
+    def _zeugnis_pruefen(self, koerper: dict) -> None:
+        if not speicher.schluessel_vorhanden():
+            return self._fehler("Zum Lesen des Zeugnisses wird der API-Schlüssel "
+                                "gebraucht. Er lässt sich auf der Übersicht eintragen.", 409)
+        try:
+            dateien = self._dateien_aus(koerper)
+            auswertung = claude.pruefe_zeugnis(dateien)
+        except ValueError as fehler:
+            return self._fehler(str(fehler))
+        except RuntimeError as fehler:
+            return self._fehler(str(fehler), 502)
+        except Exception as fehler:  # noqa: BLE001
+            return self._fehler(claude.klartext(fehler), 502)
+        name = (koerper.get("dateien") or [{}])[0].get("name", "Zeugnis")
+        return self._json(speicher.zeugnis_speichern(name, auswertung), 201)
+
+    def _lebenslauf_lesen(self, koerper: dict) -> None:
+        if not speicher.schluessel_vorhanden():
+            return self._fehler("Zum Einlesen wird der API-Schlüssel gebraucht. "
+                                "Er lässt sich auf der Übersicht eintragen.", 409)
+        try:
+            dateien = self._dateien_aus(koerper)
+            # Bewusst nur lesen und zurueckgeben, nicht speichern: Was aus einem
+            # Scan kommt, gehoert angesehen, bevor es ein Profil ueberschreibt.
+            return self._json(claude.lies_lebenslauf(dateien))
+        except ValueError as fehler:
+            return self._fehler(str(fehler))
+        except RuntimeError as fehler:
+            return self._fehler(str(fehler), 502)
+        except Exception as fehler:  # noqa: BLE001
+            return self._fehler(claude.klartext(fehler), 502)
+
+    def _import_uebernehmen(self, koerper: dict) -> None:
+        daten = koerper.get("profil") or {}
+        if not isinstance(daten, dict):
+            return self._fehler("Es kamen keine Profildaten an.")
+        # Nur bekannte Abschnitte - was das Modell zusaetzlich liefert (etwa
+        # "unklar"), gehoert in die Anzeige, nicht in die Ablage.
+        sauber = {k: v for k, v in daten.items() if k in speicher.LEERES_PROFIL}
+        if (koerper.get("modus") or "neu") == "neu":
+            name = (koerper.get("name") or "").strip()
+            if not name:
+                person = sauber.get("person", {})
+                name = f"{person.get('vorname', '')} {person.get('nachname', '')}".strip() \
+                    or "Aus Lebenslauf"
+            return self._json(speicher.profil_anlegen(name, sauber), 201)
+        return self._json(speicher.profil_schreiben(sauber))
 
     # ----------------------------------------------------- Uebungsgespraech
 

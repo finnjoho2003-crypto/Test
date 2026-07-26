@@ -23,6 +23,7 @@
         <button data-ansicht="uebersicht" aria-current="page">Übersicht</button>
         <button data-ansicht="jobsuche">Jobsuche</button>
         <button data-ansicht="gespraech">Gespräch</button>
+        <button data-ansicht="zeugnis">Zeugnis</button>
         <button data-ansicht="profil">Profil</button>
       </nav>
     </div>
@@ -168,6 +169,39 @@
     <div id="g-feedback"></div>
   </section>
 
+  <!-- ============ ZEUGNIS ============ -->
+  <section class="ansicht" id="ansicht-zeugnis" hidden>
+    <h1>Arbeitszeugnis entschlüsseln</h1>
+    <p class="unterzeile">
+      Deutsche Zeugnisse müssen wohlwollend klingen — deshalb tragen sie ihre
+      Note in einer Geheimsprache. „Stets zu unserer vollsten Zufriedenheit“
+      ist eine Eins, „zu unserer Zufriedenheit“ eine Vier. Hier steht, was
+      wirklich drinsteht.
+    </p>
+
+    <div class="karte">
+      <div class="ablage" id="z-ablage" tabindex="0" role="button"
+           aria-label="Zeugnis auswählen oder hierher ziehen">
+        <input type="file" id="z-datei" accept="application/pdf,image/jpeg,image/png" multiple hidden>
+        <div class="ablage-innen">
+          <div class="ablage-zeichen">📄</div>
+          <div><strong>Zeugnis hierher ziehen</strong> oder klicken zum Auswählen</div>
+          <div class="notiz">PDF, JPG oder PNG · mehrseitige Scans als eine PDF oder mehrere Bilder</div>
+        </div>
+      </div>
+      <p class="notiz" id="z-status"></p>
+      <p class="notiz">
+        Das Dokument wird zum Lesen an Claude geschickt und danach
+        <strong>nicht gespeichert</strong> — nur die Auswertung bleibt hier liegen.
+      </p>
+    </div>
+
+    <div id="z-ergebnis"></div>
+
+    <h2>Frühere Auswertungen</h2>
+    <div class="liste" id="z-liste"></div>
+  </section>
+
   <!-- ============ PROFIL ============ -->
   <section class="ansicht" id="ansicht-profil" hidden>
     <h1 id="profil-titel">Profil</h1>
@@ -176,6 +210,26 @@
       muss der Wahrheit entsprechen — das Tool wählt aus und formuliert, aber
       es erfindet nichts dazu.
     </p>
+
+    <!-- Der Import steht ganz oben: Alles von Hand abzutippen ist die Hürde,
+         an der die meisten aufgeben, bevor sie das Tool je benutzt haben. -->
+    <details class="karte import-karte" id="import-karte">
+      <summary><strong>Aus vorhandenem Lebenslauf einlesen</strong>
+        <span class="notiz">— spart das Abtippen</span></summary>
+      <div style="margin-top:12px">
+        <div class="ablage" id="i-ablage" tabindex="0" role="button"
+             aria-label="Lebenslauf auswählen oder hierher ziehen">
+          <input type="file" id="i-datei" accept="application/pdf,image/jpeg,image/png" multiple hidden>
+          <div class="ablage-innen">
+            <div class="ablage-zeichen">📄</div>
+            <div><strong>Lebenslauf hierher ziehen</strong> oder klicken zum Auswählen</div>
+            <div class="notiz">PDF, JPG oder PNG</div>
+          </div>
+        </div>
+        <p class="notiz" id="i-status"></p>
+      </div>
+      <div id="i-vorschau"></div>
+    </details>
 
     <!-- Mehrere Profile: etwa eines für die eigene Branche und eines für einen
          Quereinstieg, mit anderer Schwerpunktsetzung im Werdegang. -->

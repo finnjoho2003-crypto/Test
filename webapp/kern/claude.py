@@ -368,6 +368,305 @@ die Firma, und taucht in keinem Dokument auf."""
 
 
 # --------------------------------------------------------------------------- #
+# Hochgeladene Dokumente
+# --------------------------------------------------------------------------- #
+
+# Erkennung an den ersten Bytes - der Dateiname sagt nichts darueber, was
+# wirklich in der Datei steht.
+DOKUMENTARTEN = (
+    (b"%PDF-", "document", "application/pdf"),
+    (b"\xff\xd8\xff", "image", "image/jpeg"),
+    (b"\x89PNG\r\n\x1a\n", "image", "image/png"),
+)
+DOKUMENT_MAX = 20 * 1024 * 1024
+
+
+def dokument_block(rohdaten: bytes) -> dict:
+    """Macht aus hochgeladenen Bytes einen Inhaltsblock fuer die API."""
+    if not rohdaten:
+        raise ValueError("Die Datei war leer.")
+    if len(rohdaten) > DOKUMENT_MAX:
+        raise ValueError("Die Datei ist groesser als 20 MB. Bitte kleiner "
+                         "einscannen oder als PDF speichern.")
+    for kennung, art, typ in DOKUMENTARTEN:
+        if rohdaten.startswith(kennung):
+            break
+    else:
+        raise ValueError("Nur PDF, JPG und PNG lassen sich lesen. Word-Dateien "
+                         "vorher als PDF speichern (Datei - Exportieren).")
+    import base64  # noqa: PLC0415
+    return {
+        "type": art,
+        "source": {"type": "base64", "media_type": typ,
+                   # Ohne Zeilenumbrueche - die API lehnt sie ab.
+                   "data": base64.b64encode(rohdaten).decode("ascii")},
+    }
+
+
+def _mit_dokumenten(system: str, dateien: list[bytes], anweisung: str,
+                    schema: dict, max_tokens: int = 16000) -> dict:
+    """Ein Aufruf mit angehaengten Dokumenten und erzwungenem Schema.
+
+    Die Dokumente stehen vor dem Text: In dieser Reihenfolge liest das Modell
+    zuverlaessiger, weil die Anweisung dann auf etwas bereits Gesehenes zeigt.
+    """
+    inhalt = [dokument_block(d) for d in dateien]
+    inhalt.append({"type": "text", "text": anweisung})
+
+    with client().messages.stream(
+        model=MODELL,
+        max_tokens=max_tokens,
+        system=system,
+        thinking={"type": "adaptive"},
+        output_config={"effort": "high",
+                       "format": {"type": "json_schema", "schema": schema}},
+        messages=[{"role": "user", "content": inhalt}],
+    ) as stream:
+        antwort = stream.get_final_message()
+
+    if antwort.stop_reason == "refusal":
+        raise RuntimeError("Die Anfrage wurde abgelehnt. Bitte Inhalt pruefen.")
+    text = next((b.text for b in antwort.content if b.type == "text"), "")
+    if not text:
+        raise RuntimeError("Aus dem Dokument liess sich nichts lesen. Ist es "
+                           "vielleicht ein reiner Scan in schlechter Qualitaet?")
+    return json.loads(text)
+
+
+# --------------------------------------------------------------------------- #
+# Arbeitszeugnis entschluesseln
+# --------------------------------------------------------------------------- #
+
+ZEUGNIS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "art": {"type": "string",
+                "enum": ["qualifiziert", "einfach", "zwischenzeugnis", "unklar"]},
+        "arbeitgeber": {"type": "string"},
+        "position": {"type": "string"},
+        "zeitraum": {"type": "string"},
+        "gesamtnote": {"type": "string", "enum": ["1", "2", "3", "4", "5", "unklar"]},
+        "gesamtnote_begruendung": {"type": "string",
+                                   "description": "Woran genau die Note haengt"},
+        "leistungsnote": {"type": "string", "enum": ["1", "2", "3", "4", "5", "unklar"]},
+        "verhaltensnote": {"type": "string", "enum": ["1", "2", "3", "4", "5", "unklar"]},
+        "formulierungen": {
+            "type": "array",
+            "description": "Die codierten Stellen, wichtigste zuerst",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "zitat": {"type": "string", "description": "Woertlich aus dem Zeugnis"},
+                    "bedeutung": {"type": "string", "description": "Was das im Klartext heisst"},
+                    "einordnung": {"type": "string", "enum": ["gut", "neutral", "schlecht"]},
+                },
+                "required": ["zitat", "bedeutung", "einordnung"],
+                "additionalProperties": False,
+            },
+        },
+        "fehlt": {
+            "type": "array",
+            "description": "Was in einem vollstaendigen Zeugnis stehen muesste und "
+                           "hier fehlt. Ein Fehlen ist selbst eine Aussage.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "was": {"type": "string"},
+                    "warum_wichtig": {"type": "string"},
+                },
+                "required": ["was", "warum_wichtig"],
+                "additionalProperties": False,
+            },
+        },
+        "nachverhandeln": {
+            "type": "array",
+            "description": "Konkrete Aenderungswuensche an den Arbeitgeber",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "stelle": {"type": "string"},
+                    "vorschlag": {"type": "string",
+                                  "description": "Ausformulierte bessere Fassung"},
+                    "begruendung": {"type": "string"},
+                },
+                "required": ["stelle", "vorschlag", "begruendung"],
+                "additionalProperties": False,
+            },
+        },
+        "mitschicken": {"type": "string", "enum": ["ja", "eher ja", "eher nein"]},
+        "mitschicken_begruendung": {"type": "string"},
+    },
+    "required": ["art", "arbeitgeber", "position", "zeitraum", "gesamtnote",
+                 "gesamtnote_begruendung", "leistungsnote", "verhaltensnote",
+                 "formulierungen", "fehlt", "nachverhandeln", "mitschicken",
+                 "mitschicken_begruendung"],
+    "additionalProperties": False,
+}
+
+ZEUGNIS_SYSTEM = """Du entschluesselst ein deutsches Arbeitszeugnis.
+
+Deutsche Zeugnisse muessen wohlwollend formuliert sein - deshalb hat sich eine
+Geheimsprache entwickelt, in der scheinbar freundliche Saetze eine Note tragen.
+Uebersetze sie.
+
+Die Zufriedenheitsskala, an der die Leistungsnote haengt:
+  "stets zu unserer vollsten Zufriedenheit"            = 1
+  "stets zu unserer vollen Zufriedenheit"              = 2
+  "zu unserer vollsten Zufriedenheit"                  = 2
+  "stets zu unserer Zufriedenheit"                     = 3
+  "zu unserer vollen Zufriedenheit"                    = 3
+  "zu unserer Zufriedenheit"                           = 4
+  "im Grossen und Ganzen zu unserer Zufriedenheit"     = 5
+  "hat sich bemueht" / "war bemueht"                   = hat es nicht geschafft
+
+Auf die Verhaltensbeurteilung achten - die Reihenfolge der Genannten verraet
+etwas. Steht "Kollegen" vor "Vorgesetzten", deutet das auf Spannungen nach oben.
+Fehlen Vorgesetzte ganz, ist das ein deutliches Zeichen.
+
+Weitere haeufige Codes: "gesellig" (Alkohol), "einfuehlsam gegenueber
+Mitarbeiterinnen" (Anmache), "wusste sich zu verkaufen" (Blender), "trug zur
+Verbesserung des Betriebsklimas bei" (trank gern mit), "war stets puenktlich"
+als einziges Lob (mehr faellt uns nicht ein), "verliess uns auf eigenen Wunsch"
+ohne Bedauern (man ist froh), "kuendigte fristlos" oder "im gegenseitigen
+Einvernehmen" (Konflikt).
+
+Pruefe auch, was FEHLT. Ein qualifiziertes Zeugnis braucht: Taetigkeits-
+beschreibung, Leistungsbeurteilung, Verhaltensbeurteilung, Beendigungsgrund
+sowie eine Dankes- und Bedauernsformel mit guten Wuenschen. Fehlt die
+Schlussformel, ist das ein Signal - und sie laesst sich nachfordern.
+
+Sei genau und nuechtern. Nicht dramatisieren: Ein Zeugnis mit Note 2 ist gut,
+auch wenn es sich beim Lesen unspektakulaer anfuehlt. Aber auch nicht
+beschoenigen - wer mit einem schlechten Zeugnis losgeht, ohne es zu wissen,
+verliert Chancen, die er haette retten koennen.
+
+Zitiere immer woertlich. Erfinde keine Formulierung, die nicht dasteht. Steht
+etwas nicht im Dokument, ist die Note "unklar" - nicht geraten.
+
+Beim Nachverhandeln: In Deutschland besteht ein Anspruch auf ein wohlwollendes
+Zeugnis. Formuliere die Aenderungswuensche so, dass die Person sie woertlich
+uebernehmen kann."""
+
+
+def pruefe_zeugnis(dateien: list[bytes]) -> dict:
+    return _mit_dokumenten(
+        ZEUGNIS_SYSTEM, dateien,
+        "Entschluessele dieses Arbeitszeugnis vollstaendig.",
+        ZEUGNIS_SCHEMA, max_tokens=16000)
+
+
+# --------------------------------------------------------------------------- #
+# Profil aus vorhandenem Lebenslauf
+# --------------------------------------------------------------------------- #
+
+IMPORT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "person": {
+            "type": "object",
+            "properties": {
+                "vorname": {"type": "string"}, "nachname": {"type": "string"},
+                "strasse": {"type": "string"}, "plz_ort": {"type": "string"},
+                "email": {"type": "string"}, "telefon": {"type": "string"},
+                "web": {"type": "string"}, "berufsbezeichnung": {"type": "string"},
+            },
+            "required": ["vorname", "nachname", "strasse", "plz_ort", "email",
+                         "telefon", "web", "berufsbezeichnung"],
+            "additionalProperties": False,
+        },
+        "kurzprofil": {"type": "string"},
+        "stationen": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "position": {"type": "string"}, "firma": {"type": "string"},
+                    "ort": {"type": "string"}, "von": {"type": "string"},
+                    "bis": {"type": "string"}, "aufgaben": {"type": "string"},
+                    "erfolge": {"type": "string",
+                                "description": "Nur mit Zahl, wenn im Dokument eine steht"},
+                    "tools": {"type": "string"},
+                },
+                "required": ["position", "firma", "ort", "von", "bis",
+                             "aufgaben", "erfolge", "tools"],
+                "additionalProperties": False,
+            },
+        },
+        "ausbildung": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "abschluss": {"type": "string"}, "institut": {"type": "string"},
+                    "ort": {"type": "string"}, "von": {"type": "string"},
+                    "bis": {"type": "string"}, "note": {"type": "string"},
+                    "schwerpunkt": {"type": "string"},
+                },
+                "required": ["abschluss", "institut", "ort", "von", "bis",
+                             "note", "schwerpunkt"],
+                "additionalProperties": False,
+            },
+        },
+        "kenntnisse": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"kategorie": {"type": "string"}, "werte": {"type": "string"}},
+                "required": ["kategorie", "werte"],
+                "additionalProperties": False,
+            },
+        },
+        "sprachen": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"sprache": {"type": "string"}, "niveau": {"type": "string"}},
+                "required": ["sprache", "niveau"],
+                "additionalProperties": False,
+            },
+        },
+        "weiteres": {"type": "string"},
+        "unklar": {
+            "type": "array",
+            "description": "Was nicht sicher lesbar war und nachgeprueft gehoert",
+            "items": {"type": "string"},
+        },
+    },
+    "required": ["person", "kurzprofil", "stationen", "ausbildung", "kenntnisse",
+                 "sprachen", "weiteres", "unklar"],
+    "additionalProperties": False,
+}
+
+
+def lies_lebenslauf(dateien: list[bytes]) -> dict:
+    system = """Du liest einen vorhandenen Lebenslauf aus und uebertraegst ihn in
+ein strukturiertes Profil.
+
+Uebernimm ausschliesslich, was im Dokument steht. Erfinde nichts, ergaenze
+nichts, runde nichts auf. Das Profil ist die Grundlage aller spaeteren
+Bewerbungen - eine hier erfundene Angabe wandert ungeprueft in jedes Dokument
+und faellt spaetestens im Gespraech auf.
+
+Ist ein Feld im Dokument nicht enthalten, bleibt es leer. Ein leeres Feld ist
+richtig, eine geratene Angabe ist falsch.
+
+Datumsangaben in der Form MM/JJJJ, laufende Taetigkeiten mit "heute".
+
+Bei "erfolge" nur uebernehmen, was tatsaechlich als Ergebnis dasteht -
+idealerweise mit Zahl. Reine Aufgabenbeschreibungen gehoeren zu "aufgaben".
+
+Ist etwas schlecht lesbar oder mehrdeutig (verwischter Scan, unklare
+Abkuerzung), traegst du den besten Lesevorschlag ein und nennst die Stelle
+zusaetzlich unter "unklar". Lieber einmal zu oft nachfragen lassen als eine
+falsche Angabe stehen lassen."""
+
+    return _mit_dokumenten(
+        system, dateien,
+        "Uebertrage diesen Lebenslauf vollstaendig in das Profil.",
+        IMPORT_SCHEMA, max_tokens=16000)
+
+
+# --------------------------------------------------------------------------- #
 # Jobsuche im Web
 # --------------------------------------------------------------------------- #
 

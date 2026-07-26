@@ -568,6 +568,73 @@ def gespraech_loeschen(gespraech_id: str) -> bool:
     return True
 
 
+# --------------------------------------------------------------------------- #
+# Arbeitszeugnisse
+# --------------------------------------------------------------------------- #
+
+ZEUGNISSE = BASIS / "zeugnisse"
+
+
+def _zeugnis_pfad(zeugnis_id: str) -> Path:
+    if not re.fullmatch(r"[0-9a-f]{8,32}", zeugnis_id or ""):
+        raise ValueError("ungueltige Zeugnis-ID")
+    return ZEUGNISSE / f"{zeugnis_id}.json"
+
+
+def zeugnis_speichern(dateiname: str, auswertung: dict) -> dict:
+    """Legt die Auswertung ab - nicht das Zeugnis selbst.
+
+    Das Dokument bleibt bewusst ungespeichert: Es enthaelt die Beurteilung
+    einer Person durch einen frueheren Arbeitgeber und wird hier nur einmal
+    gebraucht. Was aufzuheben sich lohnt, steht in der Auswertung.
+    """
+    with _lock:
+        eintrag = {
+            "id": uuid.uuid4().hex[:12],
+            "dateiname": Path(dateiname or "Zeugnis").name[:120],
+            "auswertung": auswertung,
+            "erstellt": _jetzt(),
+        }
+        ZEUGNISSE.mkdir(parents=True, exist_ok=True)
+        _speichere(_zeugnis_pfad(eintrag["id"]), eintrag)
+    return eintrag
+
+
+def zeugnis_lesen(zeugnis_id: str) -> dict | None:
+    return _lade(_zeugnis_pfad(zeugnis_id), None)
+
+
+def zeugnisse_liste() -> list[dict]:
+    if not ZEUGNISSE.exists():
+        return []
+    eintraege = []
+    for pfad in ZEUGNISSE.glob("*.json"):
+        daten = _lade(pfad, None)
+        if not daten:
+            continue
+        a = daten.get("auswertung", {})
+        eintraege.append({
+            "id": daten.get("id", pfad.stem),
+            "dateiname": daten.get("dateiname", ""),
+            "arbeitgeber": a.get("arbeitgeber", ""),
+            "position": a.get("position", ""),
+            "zeitraum": a.get("zeitraum", ""),
+            "gesamtnote": a.get("gesamtnote", "unklar"),
+            "erstellt": daten.get("erstellt", ""),
+        })
+    eintraege.sort(key=lambda e: e.get("erstellt", ""), reverse=True)
+    return eintraege
+
+
+def zeugnis_loeschen(zeugnis_id: str) -> bool:
+    with _lock:
+        pfad = _zeugnis_pfad(zeugnis_id)
+        if not pfad.is_file():
+            return False
+        pfad.unlink()
+    return True
+
+
 def kennzahlen() -> dict:
     eintraege = bewerbungen_liste()
     nach_status = {s: 0 for s in STATUS}

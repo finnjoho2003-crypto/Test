@@ -409,3 +409,42 @@ button.knopf.hoert {
 
 @media (max-width: 640px) { .g-zeile { max-width: 100%; } }
 @media (prefers-reduced-motion: reduce) { button.knopf.hoert { animation: none; } }
+
+/* ---------- Ablagefläche für Dateien ---------- */
+.ablage {
+  border: 2px dashed var(--rand-stark); border-radius: var(--radius);
+  padding: 26px 18px; text-align: center; cursor: pointer;
+  background: var(--flaeche); transition: border-color .15s ease, background .15s ease;
+}
+.ablage:hover, .ablage:focus-visible { border-color: var(--gold); outline: none; }
+.ablage.darueber { border-color: var(--gold); background: var(--akzent-weich); }
+.ablage-innen { display: flex; flex-direction: column; gap: 5px; align-items: center; }
+.ablage-zeichen { font-size: 30px; line-height: 1; }
+
+.import-karte summary { cursor: pointer; list-style: revert; }
+.import-karte[open] summary { margin-bottom: 4px; }
+
+.i-zeile { display: flex; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--rand); }
+.i-zeile:last-child { border-bottom: 0; }
+.i-was { flex: 0 0 120px; color: var(--text-leise); font-size: 13px; }
+
+/* ---------- Zeugnis ---------- */
+/* Die Note steht als Ziffer da, nicht nur als Farbe - eine rote Kachel ohne
+   Zahl sagt jemandem mit Rot-Gruen-Schwaeche gar nichts. */
+.note {
+  flex: none; width: 34px; height: 34px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 16px; color: #fff; background: var(--entwurf);
+}
+.note-1, .note-2 { background: var(--zusage); }
+.note-3 { background: var(--gesendet); }
+.note-4, .note-5 { background: var(--absage); }
+.note-unklar { background: var(--text-still); }
+
+.deutungen { display: flex; flex-direction: column; gap: 10px; }
+.deutung { padding: 10px 13px; border-radius: 8px; border-left: 3px solid var(--rand-stark);
+           background: var(--flaeche); }
+.deutung-bedeutung { margin-top: 5px; font-size: 14px; }
+.d-gut { border-left-color: var(--zusage); }
+.d-neutral { border-left-color: var(--text-still); }
+.d-schlecht { border-left-color: var(--absage); }

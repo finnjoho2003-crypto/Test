@@ -14,7 +14,7 @@ const STATUS_TEXT = {
 // Muss mit API_STAND in server.py uebereinstimmen. Passt es nicht, laeuft der
 // Dienst noch in einer aelteren Fassung als diese Oberflaeche - siehe die
 // Erklaerung an der Konstante dort.
-const BENOETIGTER_STAND = 5;
+const BENOETIGTER_STAND = 6;
 
 let zustand = { ansicht: "uebersicht", offen: null, timer: null };
 
@@ -83,6 +83,7 @@ function routen() {
   zustand.offen = null;
   if (ziel === "profil") { zeige("profil"); ladeProfil(); return; }
   if (ziel === "jobsuche") { zeige("jobsuche"); return; }
+  if (ziel === "zeugnis") { zeige("zeugnis"); ladeZeugnisse(); return; }
   if (ziel === "gespraech") {
     zeige("gespraech");
     // Ein weiterlaufender Sprecher beim Verlassen der Ansicht waere gruselig.
@@ -1127,6 +1128,274 @@ document.addEventListener("click", (e) => {
     $("#g-feedback").innerHTML = "";
     $("#g-start").hidden = false;
     ladeGespraeche();
+  }
+});
+
+
+/* ------------------------------------------------ Dateien hochladen (gemeinsam) */
+
+const NOTEN_TEXT = {
+  "1": "sehr gut", "2": "gut", "3": "befriedigend",
+  "4": "ausreichend", "5": "mangelhaft", "unklar": "nicht erkennbar",
+};
+
+async function dateiInhalt(datei) {
+  return new Promise((fertig, schief) => {
+    const leser = new FileReader();
+    leser.onload = () => fertig({ name: datei.name, daten: leser.result });
+    leser.onerror = () => schief(new Error(`„${datei.name}“ ließ sich nicht lesen.`));
+    leser.readAsDataURL(datei);
+  });
+}
+
+/* Eine Ablagefläche, die Ziehen-und-Ablegen, Klick und Tastatur beherrscht.
+   Nur Ziehen reicht nicht: Auf dem Handy gibt es das nicht, und wer die
+   Maus nicht benutzt, käme sonst gar nicht an die Funktion heran. */
+function ablageVerdrahten(flaecheId, feldId, beiDateien) {
+  const flaeche = $(flaecheId);
+  const feld = $(feldId);
+  if (!flaeche || !feld) return;
+
+  const nehmen = (dateien) => {
+    const liste = [...dateien].filter((d) => d.size > 0);
+    if (liste.length) beiDateien(liste);
+    feld.value = "";
+  };
+
+  flaeche.addEventListener("click", () => feld.click());
+  flaeche.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); feld.click(); }
+  });
+  feld.addEventListener("change", (e) => nehmen(e.target.files));
+
+  ["dragenter", "dragover"].forEach((art) =>
+    flaeche.addEventListener(art, (e) => {
+      e.preventDefault();
+      flaeche.classList.add("darueber");
+    }));
+  ["dragleave", "drop"].forEach((art) =>
+    flaeche.addEventListener(art, (e) => {
+      e.preventDefault();
+      flaeche.classList.remove("darueber");
+    }));
+  flaeche.addEventListener("drop", (e) => nehmen(e.dataTransfer.files));
+}
+
+// Ein laufender Zähler statt eines stummen Wartens - das Lesen eines
+// mehrseitigen Scans dauert schnell eine halbe Minute.
+function uhrStarten(statusId, text) {
+  const start = Date.now();
+  const status = $(statusId);
+  const schreiben = () => {
+    status.textContent = `${text} (${Math.round((Date.now() - start) / 1000)} s)`;
+  };
+  schreiben();
+  const uhr = setInterval(schreiben, 1000);
+  return () => { clearInterval(uhr); status.textContent = ""; };
+}
+
+/* ------------------------------------------------------ Zeugnis entschlüsseln */
+
+async function ladeZeugnisse() {
+  try {
+    const daten = await hole("/api/zeugnisse");
+    $("#z-liste").innerHTML = daten.zeugnisse.length
+      ? daten.zeugnisse.map((z) => `
+          <button class="eintrag" data-zeugnis="${esc(z.id)}">
+            <div class="eintrag-text">
+              <div class="eintrag-titel">${esc(z.arbeitgeber || z.dateiname)}</div>
+              <div class="eintrag-meta">${esc([z.position, z.zeitraum, datum(z.erstellt)]
+                .filter(Boolean).join(" · "))}</div>
+            </div>
+            <span class="note note-${esc(z.gesamtnote)}">${esc(z.gesamtnote === "unklar"
+              ? "?" : z.gesamtnote)}</span>
+          </button>`).join("")
+      : `<div class="leer">Noch kein Zeugnis ausgewertet.</div>`;
+
+    $$("#z-liste [data-zeugnis]").forEach((el) =>
+      el.addEventListener("click", async () => {
+        try {
+          const z = await hole(`/api/zeugnisse/${el.dataset.zeugnis}`);
+          $("#z-ergebnis").innerHTML = zeugnisHtml(z);
+          $("#z-ergebnis").scrollIntoView({ behavior: "smooth", block: "start" });
+        } catch (fehler) { alert(fehler.message); }
+      }));
+  } catch (fehler) {
+    $("#z-liste").innerHTML = `<div class="hinweis warnung">${esc(fehler.message)}</div>`;
+  }
+}
+
+ablageVerdrahten("#z-ablage", "#z-datei", async (dateien) => {
+  $("#z-ergebnis").innerHTML = "";
+  const fertig = uhrStarten("#z-status", "Das Zeugnis wird gelesen …");
+  try {
+    const inhalte = await Promise.all(dateien.map(dateiInhalt));
+    const z = await hole("/api/zeugnisse", {
+      method: "POST", body: JSON.stringify({ dateien: inhalte }),
+    });
+    fertig();
+    $("#z-ergebnis").innerHTML = zeugnisHtml(z);
+    $("#z-ergebnis").scrollIntoView({ behavior: "smooth", block: "start" });
+    ladeZeugnisse();
+  } catch (fehler) {
+    fertig();
+    $("#z-status").textContent = fehler.message;
+  }
+});
+
+function zeugnisHtml(z) {
+  const a = z.auswertung || {};
+  const note = a.gesamtnote || "unklar";
+  const farbe = ["1", "2"].includes(note) ? "gut"
+    : ["4", "5"].includes(note) ? "warnung" : "";
+
+  let html = `<h2>Auswertung</h2>
+    <div class="hinweis ${farbe}">
+      <p><strong>Gesamtnote: ${esc(note === "unklar" ? "nicht erkennbar"
+        : `${note} — ${NOTEN_TEXT[note]}`)}</strong></p>
+      <p>${esc(a.gesamtnote_begruendung || "")}</p>
+      <p class="notiz">Leistung: ${esc(NOTEN_TEXT[a.leistungsnote] || "?")} ·
+         Verhalten: ${esc(NOTEN_TEXT[a.verhaltensnote] || "?")} ·
+         Art: ${esc(a.art || "unklar")}</p>
+    </div>`;
+
+  if ((a.formulierungen || []).length) {
+    html += `<div class="karte"><h3>Was die Formulierungen bedeuten</h3>
+      <div class="deutungen">` +
+      a.formulierungen.map((f) => `
+        <div class="deutung d-${esc(f.einordnung)}">
+          <div class="g-zitat">„${esc(f.zitat)}“</div>
+          <div class="deutung-bedeutung">${esc(f.bedeutung)}</div>
+        </div>`).join("") + `</div></div>`;
+  }
+
+  if ((a.fehlt || []).length) {
+    html += `<div class="karte"><h3>Was fehlt</h3>
+      <p class="notiz" style="margin:-4px 0 10px">Ein Fehlen ist selbst eine Aussage.</p>
+      <ul class="knapp">` +
+      a.fehlt.map((f) => `<li><strong>${esc(f.was)}</strong><br>
+        <span style="color:var(--text-leise)">${esc(f.warum_wichtig)}</span></li>`).join("") +
+      `</ul></div>`;
+  }
+
+  if ((a.nachverhandeln || []).length) {
+    html += `<div class="karte"><h3>Das lässt sich nachfordern</h3>
+      <p class="notiz" style="margin:-4px 0 10px">In Deutschland besteht ein Anspruch auf
+         ein wohlwollendes Zeugnis. Diese Formulierungen kannst du wörtlich übernehmen.</p>
+      <ul class="knapp">` +
+      a.nachverhandeln.map((n) => `<li><strong>${esc(n.stelle)}</strong><br>
+        <span class="g-besser">„${esc(n.vorschlag)}“</span><br>
+        <span style="color:var(--text-leise)">${esc(n.begruendung)}</span></li>`).join("") +
+      `</ul></div>`;
+  }
+
+  const mit = a.mitschicken || "";
+  html += `<div class="hinweis ${mit === "eher nein" ? "warnung" : ""}">
+      <p><strong>Mitschicken: ${esc(mit)}</strong></p>
+      <p>${esc(a.mitschicken_begruendung || "")}</p>
+    </div>
+    <div class="neu-zeile" style="margin-top:14px">
+      <button class="knopf gefahr" data-zeugnis-weg="${esc(z.id)}">Auswertung löschen</button>
+    </div>`;
+  return html;
+}
+
+document.addEventListener("click", async (e) => {
+  const id = e.target && e.target.dataset && e.target.dataset.zeugnisWeg;
+  if (!id) return;
+  if (!confirm("Diese Auswertung löschen?")) return;
+  await fetch(`/api/zeugnisse/${id}`, { method: "DELETE" });
+  $("#z-ergebnis").innerHTML = "";
+  ladeZeugnisse();
+});
+
+/* --------------------------------------- Profil aus Lebenslauf einlesen */
+
+let importDaten = null;
+
+ablageVerdrahten("#i-ablage", "#i-datei", async (dateien) => {
+  $("#i-vorschau").innerHTML = "";
+  importDaten = null;
+  const fertig = uhrStarten("#i-status", "Der Lebenslauf wird gelesen …");
+  try {
+    const inhalte = await Promise.all(dateien.map(dateiInhalt));
+    importDaten = await hole("/api/profil/import", {
+      method: "POST", body: JSON.stringify({ dateien: inhalte }),
+    });
+    fertig();
+    $("#i-vorschau").innerHTML = importVorschau(importDaten);
+  } catch (fehler) {
+    fertig();
+    $("#i-status").textContent = fehler.message;
+  }
+});
+
+// Erst zeigen, dann übernehmen. Was aus einem Scan kommt, darf kein Profil
+// überschreiben, bevor jemand daraufgeschaut hat.
+function importVorschau(d) {
+  const p = d.person || {};
+  const name = `${p.vorname || ""} ${p.nachname || ""}`.trim();
+  const zeile = (was, wert) => wert
+    ? `<div class="i-zeile"><span class="i-was">${esc(was)}</span><span>${esc(wert)}</span></div>` : "";
+
+  let html = `<div class="hinweis"><p><strong>Das wurde gelesen — bitte prüfen,
+      bevor es übernommen wird.</strong></p></div>
+    <div class="karte">
+      ${zeile("Name", name)}
+      ${zeile("Beruf", p.berufsbezeichnung)}
+      ${zeile("E-Mail", p.email)}
+      ${zeile("Telefon", p.telefon)}
+      ${zeile("Adresse", [p.strasse, p.plz_ort].filter(Boolean).join(", "))}
+      ${zeile("Stationen", `${(d.stationen || []).length}`)}
+      ${zeile("Ausbildung", `${(d.ausbildung || []).length}`)}
+      ${zeile("Kenntnisse", `${(d.kenntnisse || []).length} Kategorien`)}
+      ${zeile("Sprachen", (d.sprachen || []).map((s) => s.sprache).join(", "))}
+    </div>`;
+
+  if ((d.stationen || []).length) {
+    html += `<div class="karte"><h3>Werdegang</h3><ul class="knapp">` +
+      d.stationen.map((s) => `<li><strong>${esc(s.position)}</strong> — ${esc(s.firma)}
+        <span style="color:var(--text-still)">(${esc([s.von, s.bis].filter(Boolean).join(" – "))})</span></li>`).join("") +
+      `</ul></div>`;
+  }
+
+  if ((d.unklar || []).length) {
+    html += `<div class="hinweis warnung">
+      <p><strong>Diese Stellen waren nicht sicher lesbar:</strong></p>
+      <ul class="knapp">${d.unklar.map((u) => `<li>${esc(u)}</li>`).join("")}</ul>
+      <p>Bitte nach dem Übernehmen im Profil nachbessern.</p></div>`;
+  }
+
+  html += `<div class="neu-zeile" style="margin-top:14px">
+      <button class="knopf" id="i-neu">In neues Profil übernehmen</button>
+      <button class="knopf leise" id="i-hier">In dieses Profil übernehmen</button>
+      <span class="notiz" id="i-uebernahme"></span>
+    </div>
+    <p class="notiz">„In dieses Profil“ überschreibt die vorhandenen Angaben.</p>`;
+  return html;
+}
+
+document.addEventListener("click", async (e) => {
+  if (!e.target || (e.target.id !== "i-neu" && e.target.id !== "i-hier")) return;
+  if (!importDaten) return;
+  const neu = e.target.id === "i-neu";
+  if (!neu && !confirm("Die vorhandenen Angaben in diesem Profil werden überschrieben. Fortfahren?")) return;
+
+  const status = $("#i-uebernahme");
+  status.textContent = "wird übernommen …";
+  try {
+    await hole("/api/profil/import/uebernehmen", {
+      method: "POST",
+      body: JSON.stringify({ profil: importDaten, modus: neu ? "neu" : "aktuell" }),
+    });
+    importDaten = null;
+    $("#i-vorschau").innerHTML = "";
+    $("#import-karte").open = false;
+    await ladeProfil();
+    await ladeUebersicht();
+    $("#profil-status").textContent = "Aus dem Lebenslauf übernommen.";
+  } catch (fehler) {
+    status.textContent = fehler.message;
   }
 });
 
