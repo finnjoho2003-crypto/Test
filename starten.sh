@@ -102,4 +102,6 @@ fi
 # -u (ungepuffert) ist hier wichtig: Sonst haengt die Startmeldung mit der
 # Adresse im Puffer fest, und man sitzt vor einem leeren Fenster, obwohl der
 # Dienst laengst laeuft. tee schreibt zusaetzlich ein Protokoll fuer pruefen.sh.
-python3 -u webapp/server.py "${BINDUNG[@]}" "$@" 2>&1 | tee -a "$PROTOKOLL"
+# --port aus derselben Variable wie die Abschalt-Logik weiter oben. Sonst
+# raeumt das Skript Port 8765 frei und startet auf einem anderen.
+python3 -u webapp/server.py --port "$PORT" "${BINDUNG[@]}" "$@" 2>&1 | tee -a "$PROTOKOLL"

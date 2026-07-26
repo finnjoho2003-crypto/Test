@@ -44,8 +44,24 @@ fi
 echo
 
 if [ -n "${CODESPACE_NAME:-}" ] && [ -n "${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-}" ]; then
+  OEFFENTLICH="https://${CODESPACE_NAME}-${PORT}.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
   echo "-- Adresse zum Anklicken (NICHT 127.0.0.1)"
-  echo "   https://${CODESPACE_NAME}-${PORT}.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
+  echo "   $OEFFENTLICH"
+  # Die Weiterleitung von innen anklopfen. Damit laesst sich endlich trennen,
+  # woran es liegt: Antwortet hier gar nichts, existiert der Tunnel nicht -
+  # dann hilft kein weiterer Neustart des Dienstes. Kommt 302 oder 401, steht
+  # er und verlangt nur die Anmeldung bei GitHub, was im Browser normal ist.
+  if command -v curl >/dev/null 2>&1; then
+    ANTWORT=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$OEFFENTLICH" 2>/dev/null)
+    case "$ANTWORT" in
+      200)     echo "   Weiterleitung  : erreichbar (HTTP 200)" ;;
+      301|302|401|403)
+               echo "   Weiterleitung  : steht (HTTP $ANTWORT - Anmeldung noetig, normal)" ;;
+      000|"")  echo "   Weiterleitung  : KEINE ANTWORT - der Tunnel steht nicht."
+               echo "                    Im Reiter PORTS pruefen, ob 8765 aufgefuehrt ist." ;;
+      *)       echo "   Weiterleitung  : HTTP $ANTWORT" ;;
+    esac
+  fi
   echo
 fi
 
@@ -118,5 +134,9 @@ else
   echo "   (keine - der Assistent wurde noch nicht ueber starten.sh gestartet)"
 fi
 
+echo
+echo "-- Wenn sich die Seite nicht oeffnen laesst"
+echo "   bash oeffnen.sh    - oeffnet den Assistenten im Editor selbst,"
+echo "                        ohne die Weiterleitung von GitHub."
 echo
 echo "===== ENDE ====="
