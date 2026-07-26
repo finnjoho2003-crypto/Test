@@ -2,15 +2,36 @@
 # Startet den Assistenten im Codespace. Laeuft bei jedem Oeffnen.
 cd "$(dirname "$0")/.." || exit 1
 
+PROTOKOLL=/tmp/bewerbung-start.log
+: > "$PROTOKOLL"
+
 # Selbstheilend: Wurde der Codespace vor dieser Konfiguration angelegt oder ist
-# die Einrichtung abgebrochen, fehlt die Bibliothek. Statt mit einer
-# Fehlermeldung zu enden, wird sie hier einfach nachinstalliert.
+# die Einrichtung abgebrochen, fehlt die Bibliothek.
 if ! python3 -c "import anthropic" 2>/dev/null; then
-  echo "  Bibliothek wird nachinstalliert …"
-  pip install --quiet anthropic || echo "  (Fehlgeschlagen - die Oberflaeche laeuft trotzdem.)"
+  echo "  Bibliothek wird nachinstalliert (einen Moment) …"
+  pip install --quiet anthropic >>"$PROTOKOLL" 2>&1 \
+    || echo "  (Fehlgeschlagen - die Oberflaeche laeuft trotzdem.)"
 fi
 
-# 0.0.0.0 nur hier: Die Weiterleitung von GitHub erreicht den Dienst je nach
-# Umgebung nicht auf 127.0.0.1. Der Container ist isoliert, der Zugang laeuft
-# ueber die GitHub-Anmeldung - lokal bleibt es beim strengen Standard.
-exec python3 webapp/server.py --host 0.0.0.0 --kein-browser
+# Chromium im HINTERGRUND holen. Es wird nur fuer die PDF-Ausgabe gebraucht,
+# ist aber gross und langsam. Im Vordergrund - erst recht in
+# postCreateCommand - blockiert es den Aufbau des Codespace, und man sitzt
+# minutenlang vor einem Ladebalken, ohne die Oberflaeche je zu sehen.
+if ! command -v chromium >/dev/null 2>&1 && [ ! -x /usr/bin/chromium ]; then
+  (
+    export DEBIAN_FRONTEND=noninteractive
+    sudo -E apt-get update -qq \
+      && sudo -E apt-get install -y -qq --no-install-recommends \
+           chromium fonts-liberation fonts-dejavu-core \
+      && echo "PDF-Ausgabe ist jetzt bereit."
+  ) >>"$PROTOKOLL" 2>&1 &
+  echo "  PDF-Ausgabe wird im Hintergrund vorbereitet -"
+  echo "  die Oberflaeche kannst du sofort benutzen."
+fi
+
+echo ""
+
+# -u (ungepuffert): Sonst haengt die Startmeldung mit der Adresse im Puffer,
+# waehrend der Dienst laengst laeuft. 0.0.0.0, weil die Weiterleitung von
+# GitHub den Dienst je nach Umgebung nicht auf 127.0.0.1 erreicht.
+python3 -u webapp/server.py --host 0.0.0.0 --kein-browser 2>&1 | tee -a "$PROTOKOLL"
