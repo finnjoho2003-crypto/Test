@@ -18,8 +18,10 @@ wird beim Start deutlich gemeldet.
 from __future__ import annotations
 
 import argparse
+import atexit
 import json
 import mimetypes
+import os
 import re
 import sys
 import webbrowser
@@ -32,6 +34,16 @@ from kern import claude, pipeline, speicher  # noqa: E402
 
 STATIC = Path(__file__).resolve().parent / "static"
 MAX_BODY = 4 * 1024 * 1024
+
+# Muss mit BENOETIGTER_STAND in static/app.js uebereinstimmen.
+#
+# Hintergrund: Die Dateien der Oberflaeche werden bei jeder Anfrage frisch von
+# der Platte gelesen, der Python-Teil dagegen liegt im laufenden Prozess. Nach
+# einem "git pull" ohne Neustart laeuft deshalb neue Oberflaeche gegen alten
+# Dienst - und ein Aufruf, den es hier noch nicht gibt, endet in einem nackten
+# 404, das nach einem kaputten Programm aussieht. Hochzaehlen, sobald die
+# Oberflaeche etwas braucht, das der Dienst vorher nicht konnte.
+API_STAND = 2
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -123,6 +135,7 @@ class Handler(BaseHTTPRequestHandler):
     def _api_get(self, pfad: str) -> None:
         if pfad == "/api/uebersicht":
             return self._json({
+                "api_stand": API_STAND,
                 "kennzahlen": speicher.kennzahlen(),
                 "bewerbungen": [self._kurz(b) for b in speicher.bewerbungen_liste()],
                 "profil_fehlt": speicher.profil_vollstaendig(speicher.profil_lesen()),
@@ -259,6 +272,18 @@ def main() -> None:
         print(f"  Laeuft der Assistent vielleicht schon? Dann einfach {adresse} oeffnen.")
         print(f"  Sonst mit anderem Port starten:  python3 webapp/server.py --port {args.port + 1}\n")
         raise SystemExit(1) from fehler
+
+    # Eigene Prozessnummer hinterlegen, damit starten.sh eine laufende Fassung
+    # gezielt beenden kann. Die Alternative - in den Kommandozeilen aller
+    # Prozesse nach einem Muster suchen - trifft zuverlaessig auch fremde
+    # Prozesse, die das Muster nur zufaellig enthalten (etwa die Shell, die den
+    # Suchbefehl selbst ausfuehrt), und beendet im schlimmsten Fall diese.
+    pid_datei = speicher.BASIS / "dienst.pid"
+    try:
+        pid_datei.write_text(str(os.getpid()), encoding="utf-8")
+        atexit.register(lambda: pid_datei.unlink(missing_ok=True))
+    except OSError:
+        pass  # Ohne PID-Datei laeuft alles weiter, nur der Neustart wird ruppiger.
 
     rahmen = "─" * 52
     print(f"\n  {rahmen}")

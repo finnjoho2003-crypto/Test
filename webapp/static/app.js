@@ -11,6 +11,11 @@ const STATUS_TEXT = {
   absage: "Absage",
 };
 
+// Muss mit API_STAND in server.py uebereinstimmen. Passt es nicht, laeuft der
+// Dienst noch in einer aelteren Fassung als diese Oberflaeche - siehe die
+// Erklaerung an der Konstante dort.
+const BENOETIGTER_STAND = 2;
+
 let zustand = { ansicht: "uebersicht", offen: null, timer: null };
 
 /* ---------------------------------------------------------------- Werkzeug */
@@ -106,6 +111,20 @@ async function ladeUebersicht() {
       <div class="wert">${esc(kachel.wert)}</div>
       <div class="beschriftung">${esc(kachel.text)}</div>
     </div>`).join("");
+
+  // Veralteten Dienst erkennen, bevor die Person auf einen Knopf drueckt, den
+  // er noch nicht kennt. Ein "404" waere hier die unbrauchbarste aller
+  // Antworten: Es klingt nach kaputt, dabei fehlt nur ein Neustart.
+  $("#neustart-warnung").innerHTML =
+    (daten.api_stand || 1) >= BENOETIGTER_STAND ? "" : `
+      <div class="hinweis warnung">
+        <p><strong>Der Assistent läuft noch in einer älteren Fassung.</strong></p>
+        <p>Die Programmdateien wurden aktualisiert, der laufende Dienst kennt
+           sie aber noch nicht. Ein Neustart genügt — es geht nichts verloren.</p>
+        <p>Im Terminal <strong>Strg</strong>+<strong>C</strong> drücken, dann:</p>
+        <p><code>bash starten.sh</code></p>
+        <p>Danach diese Seite neu laden.</p>
+      </div>`;
 
   zeigeSchluessel(daten.schluessel);
 

@@ -51,8 +51,9 @@ def client(schluessel: str | None = None):
         return anthropic.Anthropic(api_key=schluessel)
     if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
         raise RuntimeError(
-            "Kein API-Schluessel gefunden. Bitte ANTHROPIC_API_KEY setzen "
-            "(https://console.anthropic.com/settings/keys)."
+            "Es ist kein API-Schluessel hinterlegt. Oben auf der Uebersicht "
+            "laesst er sich eintragen - zu holen unter "
+            "console.anthropic.com/settings/keys."
         )
     return anthropic.Anthropic()
 
