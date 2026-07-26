@@ -24,15 +24,46 @@ echo ""
 # eine Mustersuche in Kommandozeilen. Die trifft naemlich auch jeden fremden
 # Prozess, der das Muster zufaellig enthaelt, bis hin zu der Shell, die die
 # Suche selbst ausfuehrt.
+PORT="${PORT:-8765}"
 PID_DATEI="${BEWERBUNG_DATA:-bewerbung}/dienst.pid"
-if [ -f "$PID_DATEI" ]; then
-  ALT=$(cat "$PID_DATEI" 2>/dev/null)
-  # Gegenprobe: Nach einem Absturz kann die Nummer laengst neu vergeben sein.
-  if [ -n "$ALT" ] && grep -qs "server.py" "/proc/$ALT/cmdline" 2>/dev/null; then
-    kill "$ALT" 2>/dev/null && echo "  Aeltere Fassung beendet." && sleep 1
-  fi
-  rm -f "$PID_DATEI"
+
+# Gegenprobe vor jedem kill: Gehoert die Nummer wirklich zu unserem Dienst?
+# Nach einem Absturz kann sie laengst an ein fremdes Programm neu vergeben sein.
+ist_unser_dienst() {
+  [ -n "$1" ] && grep -qs "webapp/server.py" "/proc/$1/cmdline" 2>/dev/null
+}
+
+beende() {
+  kill "$1" 2>/dev/null || return 1
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    kill -0 "$1" 2>/dev/null || return 0
+    sleep 0.3
+  done
+  kill -9 "$1" 2>/dev/null
+  return 0
+}
+
+ALT=""
+[ -f "$PID_DATEI" ] && ALT=$(cat "$PID_DATEI" 2>/dev/null)
+
+# Ohne PID-Datei: Der laufende Dienst wurde von einer Fassung gestartet, die
+# noch keine angelegt hat. Genau der Fall nach einem Update - und der
+# hartnaeckigste: Die alte Fassung lauscht womoeglich nur auf 127.0.0.1, ist
+# also von aussen gar nicht erreichbar, blockiert aber den Port. Von innen
+# sieht dann alles in Ordnung aus, waehrend sich die Seite nicht oeffnen
+# laesst. Deshalb wird sie hier ueber den belegten Port aufgespuert.
+if ! ist_unser_dienst "$ALT"; then
+  for KANDIDAT in $( { fuser -n tcp "$PORT" 2>/dev/null \
+                     || ss -lptnH "sport = :$PORT" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 \
+                     || lsof -ti "tcp:$PORT" 2>/dev/null; } ); do
+    if ist_unser_dienst "$KANDIDAT"; then ALT="$KANDIDAT"; break; fi
+  done
 fi
+
+if ist_unser_dienst "$ALT" && beende "$ALT"; then
+  echo "  Laufende Fassung auf Port $PORT beendet."
+fi
+rm -f "$PID_DATEI"
 
 if ! python3 -c "import anthropic" 2>/dev/null; then
   echo "  Bibliothek 'anthropic' fehlt - wird nachinstalliert …"

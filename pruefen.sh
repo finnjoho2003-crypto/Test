@@ -51,12 +51,51 @@ sys.exit(0 if s.connect_ex(("127.0.0.1", int(sys.argv[1]))) == 0 else 1)
 PY
 then
   echo "   Port $PORT      : jemand lauscht"
+  # Auf welcher Adresse, ist im Codespace der entscheidende Punkt: Lauscht der
+  # Dienst nur auf 127.0.0.1, sieht von innen alles richtig aus - HTTP 200,
+  # keine Fehlermeldung -, waehrend die Weiterleitung von GitHub ihn nicht
+  # erreicht und sich die Seite schlicht nicht oeffnet.
+  # Ueber /proc statt ueber "ss": Das Werkzeug fehlt in schlanken Abbildern,
+  # Python ist dagegen immer da - und ohne diese Angabe bliebe genau der Fall
+  # unerkannt, der sich am schwersten erklaeren laesst.
+  python3 - "$PORT" "${CODESPACES:-}" <<'PY'
+import sys
+port, im_codespace = int(sys.argv[1]), bool(sys.argv[2])
+adressen = []
+for datei, breite in (("/proc/net/tcp", 8), ("/proc/net/tcp6", 32)):
+    try:
+        zeilen = open(datei).read().splitlines()[1:]
+    except OSError:
+        continue
+    for zeile in zeilen:
+        teile = zeile.split()
+        # 0A = LISTEN. Alles andere sind bestehende Verbindungen.
+        if len(teile) < 4 or teile[3] != "0A":
+            continue
+        roh, hafen = teile[1].rsplit(":", 1)
+        if int(hafen, 16) != port:
+            continue
+        # Little-Endian, byteweise umgedreht - fuer die Anzeige genuegt es,
+        # "ueberall" von "nur hier" zu unterscheiden.
+        ueberall = set(roh) == {"0"}
+        adressen.append("alle Adressen (0.0.0.0)" if ueberall else "nur 127.0.0.1")
+if adressen:
+    print("   Gebunden an    :", ", ".join(sorted(set(adressen))))
+    if im_codespace and not any("alle" in a for a in adressen):
+        print("                    ACHTUNG: nur lokal erreichbar. Die Weiter-")
+        print("                    leitung von GitHub kommt so nicht heran -")
+        print("                    die Seite oeffnet sich dann nicht.")
+        print("                    Beheben mit:  bash starten.sh")
+PY
   python3 - "$PORT" <<'PY'
 import sys, urllib.request
 op = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 try:
     with op.open(f"http://127.0.0.1:{sys.argv[1]}/api/uebersicht", timeout=6) as r:
-        print(f"   Antwort        : HTTP {r.status} - der Assistent laeuft korrekt")
+        # Bewusst nicht "laeuft korrekt": Geprueft ist nur der Zugriff von
+        # diesem Rechner aus. Ob die Weiterleitung herankommt, sagt die Zeile
+        # "Gebunden an" darueber.
+        print(f"   Antwort intern : HTTP {r.status} - der Dienst antwortet")
 except Exception as fehler:
     print(f"   Antwort        : FEHLER - {fehler}")
 PY
