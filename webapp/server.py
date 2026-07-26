@@ -251,6 +251,22 @@ class Handler(BaseHTTPRequestHandler):
             "hat_dateien": bool(eintrag.get("dateien"))}
 
 
+def oeffentliche_adresse(port: int) -> str:
+    """Die Adresse, unter der die Seite tatsaechlich erreichbar ist.
+
+    Im Codespace laeuft der Dienst in einem Container. 127.0.0.1 zeigt dort auf
+    den Container - im Browser aber auf den eigenen Rechner, wo nichts lauscht.
+    Wer die Adresse aus dem Terminal anklickt, landet also verlaesslich auf
+    einer Fehlerseite. GitHub stellt den richtigen Namen in der Umgebung
+    bereit; genau der gehoert in die Startmeldung.
+    """
+    name = os.environ.get("CODESPACE_NAME")
+    domain = os.environ.get("GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN")
+    if name and domain:
+        return f"https://{name}-{port}.{domain}"
+    return f"http://127.0.0.1:{port}"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -263,7 +279,7 @@ def main() -> None:
 
     speicher.BEWERBUNGEN.mkdir(parents=True, exist_ok=True)
     hat_schluessel = speicher.schluessel_laden()
-    adresse = f"http://127.0.0.1:{args.port}"
+    adresse = oeffentliche_adresse(args.port)
 
     try:
         server = ThreadingHTTPServer((args.host, args.port), Handler)
@@ -290,7 +306,10 @@ def main() -> None:
     print("   Der Bewerbungsassistent laeuft. Im Browser oeffnen:")
     print(f"\n       {adresse}\n")
     print(f"  {rahmen}")
-    if args.host not in ("127.0.0.1", "localhost"):
+    if adresse.startswith("https://"):
+        print("  Diese Adresse anklicken - nicht 127.0.0.1. Beim ersten Mal")
+        print("  fragt GitHub nach der Anmeldung, das ist normal.")
+    elif args.host not in ("127.0.0.1", "localhost"):
         print(f"  Achtung: erreichbar auf {args.host} - nicht nur auf diesem Rechner.")
     print(f"\n  Daten liegen in: {speicher.BASIS}")
     if not hat_schluessel:

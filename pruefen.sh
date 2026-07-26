@@ -43,6 +43,12 @@ else
 fi
 echo
 
+if [ -n "${CODESPACE_NAME:-}" ] && [ -n "${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-}" ]; then
+  echo "-- Adresse zum Anklicken (NICHT 127.0.0.1)"
+  echo "   https://${CODESPACE_NAME}-${PORT}.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
+  echo
+fi
+
 echo "-- Laeuft der Dienst auf Port $PORT?"
 if python3 - "$PORT" <<'PY' 2>/dev/null
 import socket, sys
