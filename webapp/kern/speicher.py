@@ -45,24 +45,50 @@ def schluessel_laden() -> bool:
 
     Ohne das muesste die Person bei jedem Start eine Umgebungsvariable setzen -
     fuer die meisten die groesste Huerde ueberhaupt. Einmal eintragen genuegt.
+
+    Die eingetragene Datei hat Vorrang vor der Umgebungsvariable. Das ist kein
+    Detail: Setzt die Umgebung einen alten oder unvollstaendigen Schluessel
+    (etwa ein Codespace-Secret mit Tippfehler), galt frueher dieser - und die
+    Oberflaeche zeigte gar kein Eingabefeld mehr an, weil ja "ein Schluessel da
+    war". Der Fehler liess sich dann ueberhaupt nicht mehr korrigieren. Wer
+    zuletzt bewusst etwas eingetragen hat, gewinnt.
     """
-    if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"):
-        return True
     try:
         wert = SCHLUESSEL_DATEI.read_text(encoding="utf-8").strip()
-    except FileNotFoundError:
-        return False
+    except OSError:
+        wert = ""
     if wert:
         os.environ["ANTHROPIC_API_KEY"] = wert
+        os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
         return True
-    return False
+    return bool(os.environ.get("ANTHROPIC_API_KEY")
+                or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
 
 
-def schluessel_speichern(wert: str) -> None:
+def pruefe_form(wert: str) -> str:
+    """Prueft die Gestalt des Schluessels, ohne das Netz zu bemuehen.
+
+    Die haeufigsten Fehler beim Kopieren aus der Konsole lassen sich hier schon
+    erkennen und praezise benennen. Kommt derselbe Fehler erst als "401 -
+    invalid" mitten in einer Bewerbung zurueck, sagt er nichts darueber, was
+    schiefging.
+    """
     wert = (wert or "").strip()
     if not wert.startswith("sk-"):
         raise ValueError("Das sieht nicht nach einem API-Schluessel aus "
                          "(er beginnt mit 'sk-ant-').")
+    if any(zeichen.isspace() for zeichen in wert):
+        raise ValueError("Im Schluessel steht ein Leerzeichen oder Zeilenumbruch. "
+                         "Bitte noch einmal vollstaendig kopieren und einfuegen.")
+    if len(wert) < 40:
+        raise ValueError("Der Schluessel ist zu kurz - beim Kopieren ist wohl "
+                         "das Ende abgeschnitten worden. Bitte vollstaendig "
+                         "einfuegen (er ist rund 100 Zeichen lang).")
+    return wert
+
+
+def schluessel_speichern(wert: str) -> None:
+    wert = pruefe_form(wert)
     with _lock:
         SCHLUESSEL_DATEI.parent.mkdir(parents=True, exist_ok=True)
         SCHLUESSEL_DATEI.write_text(wert, encoding="utf-8")
@@ -72,6 +98,9 @@ def schluessel_speichern(wert: str) -> None:
         except OSError:
             pass
     os.environ["ANTHROPIC_API_KEY"] = wert
+    # Sonst gewinnt ein gesetztes Bearer-Token im SDK und der gerade
+    # eingetragene Schluessel wird gar nicht erst verschickt.
+    os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
 
 
 def schluessel_vorhanden() -> bool:

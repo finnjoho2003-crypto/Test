@@ -107,38 +107,7 @@ async function ladeUebersicht() {
       <div class="beschriftung">${esc(kachel.text)}</div>
     </div>`).join("");
 
-  // Ohne Schluessel geht nichts - deshalb steht die Abfrage ganz oben und
-  // nicht in einem Einstellungsmenue, das niemand sucht.
-  $("#schluessel-warnung").innerHTML = daten.schluessel ? "" : `
-    <div class="hinweis warnung">
-      <p><strong>Einmalig: API-Schlüssel eintragen</strong></p>
-      <p>Das Tool nutzt Claude für die Analyse und die Texte. Den Schlüssel gibt es
-         unter <code>console.anthropic.com/settings/keys</code> — er beginnt mit
-         <code>sk-ant-</code> und bleibt auf diesem Rechner.</p>
-      <div class="neu-zeile" style="margin-top:9px">
-        <input type="password" id="schluessel-feld" placeholder="sk-ant-..."
-               autocomplete="off" style="flex:1 1 300px">
-        <button class="knopf" id="schluessel-speichern">Speichern</button>
-      </div>
-      <p id="schluessel-fehler" style="margin-top:7px;color:var(--absage)"></p>
-    </div>`;
-
-  if (!daten.schluessel) {
-    $("#schluessel-speichern").addEventListener("click", async () => {
-      const feld = $("#schluessel-feld");
-      try {
-        await hole("/api/schluessel", {
-          method: "POST", body: JSON.stringify({ schluessel: feld.value }),
-        });
-        ladeUebersicht();
-      } catch (fehler) {
-        $("#schluessel-fehler").textContent = fehler.message;
-      }
-    });
-    $("#schluessel-feld").addEventListener("keydown", (e) => {
-      if (e.key === "Enter") $("#schluessel-speichern").click();
-    });
-  }
+  zeigeSchluessel(daten.schluessel);
 
   $("#profil-warnung").innerHTML = daten.profil_fehlt.length
     ? `<div class="hinweis warnung">
@@ -159,6 +128,93 @@ async function ladeUebersicht() {
   // Solange etwas laeuft, im Hintergrund weiter aktualisieren.
   const laeuft = liste.some((b) => b.phase !== "fertig" && b.phase !== "fehler");
   planePolling(laeuft && zustand.ansicht === "uebersicht" ? ladeUebersicht : null);
+}
+
+// Ohne Schluessel geht nichts - deshalb steht die Abfrage ganz oben und nicht
+// in einem Einstellungsmenue, das niemand sucht. Und sie bleibt auch dann
+// erreichbar, wenn schon einer hinterlegt ist: Ein falsch eingetragener
+// Schluessel liess sich sonst ueberhaupt nicht mehr korrigieren - die
+// Oberflaeche blendete das Feld aus, weil ja "einer da war", und jede
+// Bewerbung scheiterte weiter an derselben Ablehnung.
+function zeigeSchluessel(vorhanden, aufgeklappt = false) {
+  const ziel = $("#schluessel-warnung");
+
+  if (vorhanden && !aufgeklappt) {
+    ziel.innerHTML = `
+      <p class="schluessel-zeile">
+        API-Schlüssel ist hinterlegt.
+        <button type="button" class="link-knopf" id="schluessel-aendern">Schlüssel ändern</button>
+        <button type="button" class="link-knopf" id="schluessel-testen">jetzt testen</button>
+        <span id="schluessel-status"></span>
+      </p>`;
+    $("#schluessel-aendern").addEventListener("click",
+      () => zeigeSchluessel(true, true));
+    $("#schluessel-testen").addEventListener("click", async () => {
+      const status = $("#schluessel-status");
+      status.textContent = "wird geprüft …";
+      status.className = "";
+      try {
+        const antwort = await hole("/api/schluessel/pruefen", { method: "POST" });
+        if (antwort.ok) {
+          status.textContent = antwort.meldung;
+          status.className = "status-gut";
+          return;
+        }
+        // Funktioniert er nicht, ist die Meldung allein nutzlos - das
+        // Eingabefeld muss gleich mit aufgehen.
+        zeigeSchluessel(true, true);
+        $("#schluessel-fehler").textContent = antwort.meldung;
+      } catch (fehler) {
+        status.textContent = fehler.message;
+        status.className = "status-schlecht";
+      }
+    });
+    return;
+  }
+
+  ziel.innerHTML = `
+    <div class="hinweis warnung">
+      <p><strong>${vorhanden ? "Neuen API-Schlüssel eintragen" : "Einmalig: API-Schlüssel eintragen"}</strong></p>
+      <p>Das Tool nutzt Claude für die Analyse und die Texte. Den Schlüssel gibt es
+         unter <code>console.anthropic.com/settings/keys</code> — er beginnt mit
+         <code>sk-ant-</code> und bleibt auf diesem Rechner.</p>
+      <p>Wichtig: Der Schlüssel wird nur ein einziges Mal angezeigt. Kopiere ihn
+         vollständig — er ist rund 100 Zeichen lang.</p>
+      <div class="neu-zeile" style="margin-top:9px">
+        <input type="password" id="schluessel-feld" placeholder="sk-ant-..."
+               autocomplete="off" style="flex:1 1 300px">
+        <button class="knopf" id="schluessel-speichern">Prüfen und speichern</button>
+      </div>
+      <p id="schluessel-fehler" style="margin-top:7px;color:var(--absage)"></p>
+    </div>`;
+
+  const speichern = async () => {
+    const feld = $("#schluessel-feld");
+    const meldung = $("#schluessel-fehler");
+    const knopf = $("#schluessel-speichern");
+    knopf.disabled = true;
+    // Der Schluessel wird vor dem Speichern gegen die API geprueft. Das dauert
+    // einen Moment - ohne Rueckmeldung sieht das aus, als sei der Klick ins
+    // Leere gegangen, und es wird ein zweites Mal geklickt.
+    meldung.textContent = "Schlüssel wird geprüft …";
+    meldung.style.color = "var(--text-still)";
+    try {
+      await hole("/api/schluessel", {
+        method: "POST", body: JSON.stringify({ schluessel: feld.value }),
+      });
+      ladeUebersicht();
+    } catch (fehler) {
+      meldung.textContent = fehler.message;
+      meldung.style.color = "var(--absage)";
+    } finally {
+      knopf.disabled = false;
+    }
+  };
+
+  $("#schluessel-speichern").addEventListener("click", speichern);
+  $("#schluessel-feld").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") speichern();
+  });
 }
 
 function eintragHtml(b) {

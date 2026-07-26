@@ -256,3 +256,18 @@ ul.knapp li { margin-bottom: 5px; }
   main { padding: 18px 16px 60px; }
   .pdf-rahmen { height: 400px; }
 }
+
+/* ---- Zeile fuer den API-Schluessel -------------------------------------- */
+/* Zurueckhaltend: Ist der Schluessel in Ordnung, ist das keine Meldung wert -
+   nur der Weg zum Aendern muss auffindbar bleiben. */
+.schluessel-zeile {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--text-still);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px;
+}
+.status-gut     { color: var(--zusage); }
+.status-schlecht { color: var(--absage); }

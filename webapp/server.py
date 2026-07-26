@@ -28,7 +28,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from kern import pipeline, speicher  # noqa: E402
+from kern import claude, pipeline, speicher  # noqa: E402
 
 STATIC = Path(__file__).resolve().parent / "static"
 MAX_BODY = 4 * 1024 * 1024
@@ -163,8 +163,25 @@ class Handler(BaseHTTPRequestHandler):
         koerper = self._koerper()
 
         if pfad == "/api/schluessel":
-            speicher.schluessel_speichern(koerper.get("schluessel", ""))
+            wert = koerper.get("schluessel", "")
+            # Erst pruefen, dann speichern. Ein fehlerhafter Schluessel darf
+            # einen funktionierenden nicht ueberschreiben - und die Person
+            # erfaehrt jetzt, dass er nicht taugt, statt zwei Minuten spaeter
+            # mitten in einer Bewerbung.
+            speicher.pruefe_form(wert)
+            try:
+                claude.pruefe_schluessel(wert.strip())
+            except RuntimeError as fehler:
+                return self._fehler(str(fehler), 400)
+            speicher.schluessel_speichern(wert)
             return self._json({"ok": True})
+
+        if pfad == "/api/schluessel/pruefen":
+            try:
+                claude.pruefe_schluessel()
+            except RuntimeError as fehler:
+                return self._json({"ok": False, "meldung": str(fehler)})
+            return self._json({"ok": True, "meldung": "Der Schlüssel funktioniert."})
 
         if pfad == "/api/profil":
             return self._json(speicher.profil_schreiben(koerper))

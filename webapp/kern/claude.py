@@ -28,8 +28,11 @@ Dann ist nicht nur die Stelle weg, sondern bei Anstellung auch die
 Anfechtbarkeit des Arbeitsvertrags im Raum."""
 
 
-def client():
+def client(schluessel: str | None = None):
     """Client mit Zugangsdaten aus der Umgebung (ANTHROPIC_API_KEY).
+
+    Mit `schluessel` wird ein uebergebener Wert benutzt, ohne ihn vorher
+    irgendwo zu hinterlegen - gedacht zum Pruefen einer Eingabe.
 
     Die Bibliothek wird bewusst erst hier importiert und nicht oben im Modul.
     Sonst haengt der komplette Server an ihr - und die Oberflaeche liesse sich
@@ -44,12 +47,58 @@ def client():
             "pip install anthropic - danach den Assistenten neu starten."
         ) from fehler
 
+    if schluessel:
+        return anthropic.Anthropic(api_key=schluessel)
     if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
         raise RuntimeError(
             "Kein API-Schluessel gefunden. Bitte ANTHROPIC_API_KEY setzen "
             "(https://console.anthropic.com/settings/keys)."
         )
     return anthropic.Anthropic()
+
+
+def klartext(fehler: Exception) -> str:
+    """Uebersetzt einen API-Fehler in einen Satz, mit dem man etwas anfangen kann.
+
+    Die Meldungen des SDK sind englisch und nennen den Statuscode - fuer die
+    Fehlersuche gut, fuer die Person vor dem Bildschirm nutzlos. Wichtig ist
+    nicht, dass 401 kam, sondern was jetzt zu tun ist.
+    """
+    status = getattr(fehler, "status_code", None)
+    if status == 401:
+        return ("Der API-Schluessel wurde abgelehnt. Meist ist er beim Kopieren "
+                "unvollstaendig geblieben oder inzwischen geloescht worden. "
+                "Bitte oben auf der Uebersicht ueber 'Schluessel aendern' einen "
+                "neuen eintragen - er wird sofort geprueft.")
+    if status == 403:
+        return ("Der Schluessel ist gueltig, darf diesen Zugriff aber nicht. "
+                "Gehoert er zur richtigen Organisation?")
+    if status in (400, 402) and "credit" in str(fehler).lower():
+        return ("Das Guthaben des Kontos ist aufgebraucht. Unter "
+                "console.anthropic.com/settings/billing laesst es sich aufladen.")
+    if status == 429:
+        return ("Zu viele Anfragen in kurzer Zeit. Bitte ein paar Minuten warten "
+                "und die Bewerbung erneut starten.")
+    if status is not None and status >= 500:
+        return ("Der Dienst antwortet gerade nicht. Das liegt nicht an dir - "
+                "bitte die Bewerbung spaeter erneut starten.")
+    return str(fehler) or fehler.__class__.__name__
+
+
+def pruefe_schluessel(wert: str | None = None) -> None:
+    """Wirft mit klarer Meldung, wenn der Schluessel nicht funktioniert.
+
+    Fragt die Modellliste ab statt einen Text zu erzeugen: Das prueft die
+    Zugangsdaten genauso, kostet aber nichts und dauert einen Wimpernschlag.
+
+    Mit `wert` wird ein noch nicht gespeicherter Schluessel geprueft - so laesst
+    sich beim Eintragen sofort antworten, statt die Person zwei Minuten auf eine
+    Bewerbung warten zu lassen, die dann an "401" scheitert.
+    """
+    try:
+        client(wert).models.list(limit=1)
+    except Exception as fehler:  # noqa: BLE001
+        raise RuntimeError(klartext(fehler)) from fehler
 
 
 def _json_antwort(system: str, inhalt: str, schema: dict,

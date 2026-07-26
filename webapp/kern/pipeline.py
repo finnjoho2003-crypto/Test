@@ -166,8 +166,10 @@ def _lauf(bewerbung_id: str, anzeigentext: str | None) -> None:
                                          fehler="")
     except Exception as fehler:  # noqa: BLE001 - jeder Fehler gehoert in die UI
         traceback.print_exc()
+        # In die Oberflaeche gehoert ein Satz, aus dem hervorgeht, was zu tun
+        # ist - nicht der englische Rohtext des SDK samt Statuscode.
         speicher.bewerbung_aktualisieren(
-            bewerbung_id, phase="fehler", fehler=str(fehler) or fehler.__class__.__name__)
+            bewerbung_id, phase="fehler", fehler=claude.klartext(fehler))
 
 
 def starten(bewerbung_id: str, anzeigentext: str | None = None) -> None:
