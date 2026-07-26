@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import glob
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -47,9 +48,49 @@ def find_chromium() -> str:
     )
 
 
+LINK = re.compile(
+    r"""<link[^>]*rel=["']?stylesheet["']?[^>]*href=["']([^"'>]+)["'][^>]*>"""
+    r"""|<link[^>]*href=["']([^"'>]+)["'][^>]*rel=["']?stylesheet["']?[^>]*>""",
+    re.I)
+
+
+def stylesheets_einbetten(html_path: Path) -> str:
+    """Ersetzt <link rel=stylesheet> durch den Inhalt der Datei.
+
+    Notwendig, nicht kosmetisch: Chromium laedt im Druckmodus ueber eine
+    file://-Adresse keine verlinkten Stylesheets aus demselben Ordner. Ohne
+    diesen Schritt blieb theme.css - also die aus der Firmenwebsite
+    abgeleitete Farbgebung - wirkungslos, und jedes Dokument sah gleich aus,
+    obwohl die Farben korrekt ermittelt worden waren. Der Fehler ist von aussen
+    nicht zu sehen: Es fehlt keine Datei, es kommt keine Meldung, das PDF ist
+    nur einfach nicht eingefaerbt.
+
+    Fehlt eine Datei, verschwindet der Verweis ersatzlos - im Dokument stehen
+    Ausweichfarben bereit, es bleibt also immer lesbar.
+    """
+    roh = html_path.read_text(encoding="utf-8")
+
+    def ersetze(treffer: re.Match) -> str:
+        ziel = treffer.group(1) or treffer.group(2) or ""
+        if "//" in ziel or ziel.startswith("data:"):
+            return treffer.group(0)  # Externes bleibt, wie es ist.
+        datei = (html_path.parent / ziel).resolve()
+        # Nicht ausserhalb des Dokumentordners lesen - der Pfad kann aus einer
+        # Vorlage stammen, die nicht selbst geschrieben wurde.
+        if html_path.parent.resolve() not in datei.parents or not datei.is_file():
+            return ""
+        return f"<style data-quelle=\"{ziel}\">\n{datei.read_text(encoding='utf-8')}\n</style>"
+
+    return LINK.sub(ersetze, roh)
+
+
 def render(html_path: Path, pdf_path: Path, binary: str, timeout: int = 120) -> None:
     if not html_path.exists():
         raise SystemExit(f"HTML nicht gefunden: {html_path}")
+
+    # Im selben Ordner, damit alle uebrigen relativen Verweise weiter stimmen.
+    fertig = html_path.with_name(f".{html_path.stem}.render.html")
+    fertig.write_text(stylesheets_einbetten(html_path), encoding="utf-8")
 
     cmd = [
         binary,
@@ -63,9 +104,12 @@ def render(html_path: Path, pdf_path: Path, binary: str, timeout: int = 120) -> 
         "--disable-extensions",
         "--disable-background-networking",
         f"--print-to-pdf={pdf_path}",
-        html_path.resolve().as_uri(),
+        fertig.resolve().as_uri(),
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    finally:
+        fertig.unlink(missing_ok=True)
 
     if not pdf_path.exists() or pdf_path.stat().st_size < 1000:
         sys.stderr.write(proc.stderr[-2000:] + "\n")

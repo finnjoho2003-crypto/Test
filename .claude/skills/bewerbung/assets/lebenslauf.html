@@ -168,7 +168,19 @@
   .unterschrift { text-align: right; }
   .unterschrift img { height: 13mm; display: block; margin-left: auto; }
 
-  @media print { .eintrag, section { page-break-inside: avoid; } }
+  /* Nur die einzelnen Eintraege zusammenhalten - niemals ganze Abschnitte.
+     Stand hier frueher auch "section", wanderte ein Abschnitt, der nicht mehr
+     komplett auf die Seite passte, geschlossen auf die naechste. Bei
+     "Berufserfahrung" mit mehreren Stationen blieb dadurch das untere
+     Drittel der ersten Seite leer - und der Lebenslauf sah aus, als fehle
+     etwas. Ein Abschnitt darf umbrechen; ein einzelner Eintrag nicht. */
+  @media print {
+    .eintrag { page-break-inside: avoid; }
+    /* Eine Ueberschrift allein am Seitenfuss ist ein Versprechen, das die
+       Seite nicht mehr einloest. */
+    h2 { page-break-after: avoid; break-after: avoid; }
+    section { page-break-inside: auto; }
+  }
 </style>
 </head>
 

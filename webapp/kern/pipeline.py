@@ -62,6 +62,26 @@ def _text_von_url(url: str) -> str:
     return text.strip()
 
 
+BOERSEN = ("stepstone", "indeed", "linkedin", "xing", "monster", "glassdoor",
+           "kununu", "arbeitsagentur", "jobware", "meinestadt", "jobs.",
+           "softgarden", "personio", "workday", "successfactors", "greenhouse",
+           "lever.co", "smartrecruiters", "join.com", "empfehlungsbund")
+
+RECHTSFORMEN = re.compile(
+    r"\b(gmbh|mbh|ag|se|kg|ohg|gbr|ug|e\.?\s?v|e\.?\s?k|co\.?|kgaa|"
+    r"holding|group|gruppe|deutschland|germany|inc|ltd|llc|plc|nv|bv|sa)\b",
+    re.I)
+
+
+def _namensteil(firma: str) -> str:
+    """Macht aus 'Muster Technik GmbH & Co. KG' -> 'mustertechnik'."""
+    name = firma.lower()
+    for alt, neu in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss")):
+        name = name.replace(alt, neu)
+    name = RECHTSFORMEN.sub(" ", name)
+    return re.sub(r"[^a-z0-9]+", "", name)
+
+
 def _firmen_website(analyse: dict, job_url: str) -> str:
     """Bestimmt die Startseite der Firma - nicht die der Jobboerse."""
     kandidat = (analyse.get("firma_website") or "").strip()
@@ -71,17 +91,46 @@ def _firmen_website(analyse: dict, job_url: str) -> str:
         return kandidat
 
     host = urllib.parse.urlparse(job_url).netloc.lower()
-    boersen = ("stepstone", "indeed", "linkedin", "xing", "monster", "glassdoor",
-               "kununu", "arbeitsagentur", "jobs.", "jobware", "meinestadt")
-    if any(b in host for b in boersen):
+    if host and not any(b in host for b in BOERSEN):
+        return f"https://{host}"
+
+    # Die Anzeige stand auf einer Jobboerse - dort ist nichts ueber das Design
+    # der Firma zu holen. Aus dem Firmennamen laesst sich die Adresse aber oft
+    # erraten. Geraten wird nur, was sich anschliessend bestaetigen laesst:
+    # Die Seite muss den Namen auch tatsaechlich enthalten. Sonst landet das
+    # Design irgendeiner fremden Firma im Lebenslauf.
+    kern = _namensteil(analyse.get("firma", ""))
+    if len(kern) < 4:
         return ""
-    return f"https://{host}" if host else ""
+
+    sys.path.insert(0, str(SKRIPTE))
+    try:
+        import extract_brand  # noqa: PLC0415
+        for endung in (".de", ".com", ".net", ".at", ".ch"):
+            adresse = f"https://www.{kern}{endung}"
+            try:
+                _, roh = extract_brand.fetch(adresse, timeout=12)
+            except Exception:  # noqa: BLE001 - jeder Fehlversuch ist nur ein Nein
+                continue
+            if roh and kern[:6] in _namensteil(roh[:200000]):
+                return adresse
+    finally:
+        sys.path.pop(0)
+    return ""
 
 
-def _design(bewerbung_id: str, website: str, ordner: Path) -> dict:
-    """Leitet die Hausfarben ab. Scheitert nie hart - Standardpalette genuegt."""
+def _design(bewerbung_id: str, website: str, ordner: Path) -> tuple[dict, str]:
+    """Leitet die Hausfarben ab.
+
+    Scheitert nie hart - die Standardpalette sieht ordentlich aus. Der Grund
+    wird aber zurueckgegeben und angezeigt: Bleibt das Design unerklaert aus,
+    wirkt es wie ein defektes Programm.
+    """
     if not website:
-        return {}
+        return {}, ("Die Firmenwebsite liess sich aus der Anzeige nicht "
+                    "ermitteln - vermutlich stammt sie von einer Jobboerse. "
+                    "Trage sie im Feld unten ein und starte neu, dann wird "
+                    "das Design uebernommen.")
     ergebnis = subprocess.run(
         [sys.executable, str(SKRIPTE / "extract_brand.py"), website,
          "-o", str(ordner / "brand.json"),
@@ -89,10 +138,12 @@ def _design(bewerbung_id: str, website: str, ordner: Path) -> dict:
         capture_output=True, text=True, timeout=180,
     )
     if ergebnis.returncode != 0 or not (ordner / "brand.json").exists():
-        return {}
+        return {}, (f"{website} liess sich nicht auswerten "
+                    f"({(ergebnis.stderr or '').strip()[-160:] or 'kein Zugriff'}). "
+                    "Es gilt die Standardgestaltung.")
     import json  # noqa: PLC0415
     with open(ordner / "brand.json", encoding="utf-8") as fh:
-        return json.load(fh)
+        return json.load(fh), ""
 
 
 def _lauf(bewerbung_id: str, anzeigentext: str | None) -> None:
@@ -105,7 +156,17 @@ def _lauf(bewerbung_id: str, anzeigentext: str | None) -> None:
     try:
         # 1 - Anzeige
         _melde(bewerbung_id, "Stellenanzeige laden", 10)
-        text = anzeigentext.strip() if anzeigentext else _text_von_url(eintrag["url"])
+        # Beim Wiederholen liegt die Anzeige schon im Ordner. Sie von dort zu
+        # nehmen spart nicht nur einen Abruf: Wurde der Text urspruenglich von
+        # Hand eingefuegt, gibt es gar keine Adresse, von der er sich erneut
+        # holen liesse - der zweite Lauf waere sonst zum Scheitern verurteilt.
+        gespeichert = ordner / "anzeige.txt"
+        if anzeigentext:
+            text = anzeigentext.strip()
+        elif gespeichert.is_file():
+            text = gespeichert.read_text(encoding="utf-8").strip()
+        else:
+            text = _text_von_url(eintrag["url"])
         if len(text) < 200:
             raise RuntimeError("Der Anzeigentext ist zu kurz für eine Analyse.")
         (ordner / "anzeige.txt").write_text(text, encoding="utf-8")
@@ -120,8 +181,14 @@ def _lauf(bewerbung_id: str, anzeigentext: str | None) -> None:
 
         # 3 - Design
         _melde(bewerbung_id, "Firmendesign ableiten", 45)
-        brand = _design(bewerbung_id, _firmen_website(analyse, eintrag["url"]), ordner)
-        speicher.bewerbung_aktualisieren(bewerbung_id, brand=brand)
+        # Eine von Hand eingetragene Adresse schlaegt jede Ermittlung: Sie kommt
+        # von der Person, die die Firma kennt.
+        website = (eintrag.get("firma_website") or "").strip() \
+            or _firmen_website(analyse, eintrag["url"])
+        brand, design_hinweis = _design(bewerbung_id, website, ordner)
+        speicher.bewerbung_aktualisieren(bewerbung_id, brand=brand,
+                                         firma_website=website,
+                                         design_hinweis=design_hinweis)
 
         # 4 - Texte
         _melde(bewerbung_id, "Unterlagen texten", 70)
@@ -137,7 +204,15 @@ def _lauf(bewerbung_id: str, anzeigentext: str | None) -> None:
 
         # 5 - PDF
         _melde(bewerbung_id, "PDF erzeugen", 85)
-        seiten = dokumente.rendere_pdf([ordner / "anschreiben.html", ordner / "lebenslauf.html"])
+        # Das Anschreiben muss auf eine Seite - nicht "moeglichst". Der
+        # Lebenslauf darf zwei haben, soll aber nicht wegen dreier Zeilen auf
+        # eine dritte rutschen und keine fast leere Seite hinterlassen.
+        seiten = {
+            "anschreiben.pdf": dokumente.rendere_begrenzt(
+                ordner / "anschreiben.html", "anschreiben", hart=1),
+            "lebenslauf.pdf": dokumente.rendere_begrenzt(
+                ordner / "lebenslauf.html", "lebenslauf", hart=2, weich=1),
+        }
 
         nachname = person.get("nachname", "Bewerbung") or "Bewerbung"
         vorname = person.get("vorname", "") or ""

@@ -410,6 +410,26 @@ function detailHtml(b) {
     html += `</div><div id="vorschau"></div>`;
   }
 
+  /* -------- Firmendesign -------- */
+  // Bleibt die Gestaltung neutral, ohne dass jemand sagt warum, wirkt das wie
+  // ein Fehler im Programm. Meist ist es keiner: Auf einer Jobbörse steht die
+  // Firmenwebsite oft schlicht nicht. Deshalb hier der Grund und gleich das
+  // Feld, mit dem es sich beheben lässt.
+  if (b.design_hinweis) {
+    html += `<div class="hinweis warnung">
+      <p><strong>Das Firmendesign wurde nicht übernommen.</strong></p>
+      <p>${esc(b.design_hinweis)}</p>
+      <div class="neu-zeile" style="margin-top:9px">
+        <input type="text" id="firma-website" placeholder="www.firma.de"
+               value="${esc(b.firma_website || "")}" style="flex:1 1 260px">
+        <button class="knopf" id="design-neu">Übernehmen und neu erstellen</button>
+      </div>
+    </div>`;
+  } else if (b.firma_website && b.phase === "fertig") {
+    html += `<p class="schluessel-zeile">Gestaltung abgeleitet von
+      <strong>${esc(b.firma_website)}</strong></p>`;
+  }
+
   /* -------- Passung und Lücken -------- */
   html += `<h2>Einschätzung</h2>`;
   if (b.passung) {
@@ -531,6 +551,27 @@ function verdrahteDetail(b) {
       } catch (fehler) {
         alert(fehler.message);
         wiederholen.disabled = false;
+      }
+    });
+  }
+
+  const designNeu = $("#design-neu");
+  if (designNeu) {
+    designNeu.addEventListener("click", async () => {
+      const adresse = $("#firma-website").value.trim();
+      if (!adresse) {
+        alert("Bitte die Adresse der Firmenwebsite eintragen, z. B. www.firma.de");
+        return;
+      }
+      designNeu.disabled = true;
+      try {
+        await hole(`/api/bewerbungen/${b.id}/neu`, {
+          method: "POST", body: JSON.stringify({ firma_website: adresse }),
+        });
+        ladeDetail();
+      } catch (fehler) {
+        alert(fehler.message);
+        designNeu.disabled = false;
       }
     });
   }

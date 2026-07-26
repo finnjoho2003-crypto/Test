@@ -236,8 +236,16 @@ class Handler(BaseHTTPRequestHandler):
             eintrag = speicher.bewerbung_lesen(treffer.group(1))
             if not eintrag:
                 return self._fehler("Nicht gefunden", 404)
+            # Adresse der Firmenwebsite von Hand - der einzige Weg, wenn die
+            # Anzeige von einer Jobboerse stammt und die Firma dort nicht
+            # verlinkt ist.
+            website = (koerper.get("firma_website") or "").strip()
+            if website and not re.match(r"https?://", website):
+                website = "https://" + website
             speicher.bewerbung_aktualisieren(treffer.group(1), phase="warteschlange",
-                                             fortschritt=0, fehler="")
+                                             fortschritt=0, fehler="",
+                                             firma_website=website,
+                                             design_hinweis="")
             pipeline.starten(treffer.group(1), (koerper.get("text") or "").strip() or None)
             return self._json({"ok": True})
 

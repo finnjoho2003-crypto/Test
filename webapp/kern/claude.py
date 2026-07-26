@@ -333,7 +333,10 @@ nichts beitraegt. Muster je Punkt: Handlung, Gegenstand/Umfang, Ergebnis mit
 Zahl. Zahlen sind der Kern; wo im Profil keine steht, erfindest du keine.
 Begriffe der Anzeige woertlich aufgreifen, wenn dieselbe Taetigkeit gemeint ist.
 
-Anschreiben: eine Seite, rund 300-400 Woerter.
+Anschreiben: eine Seite, 280 bis 340 Woerter - lieber am unteren Rand. Das ist
+keine Stilfrage, sondern die Kapazitaet des Briefbogens: Darueber muss die
+Gestaltung enger gezogen werden, und ein gedraengter Brief wirkt schlechter als
+ein kurzer. Wer nichts mehr zu belegen hat, hoert auf.
 - Einstieg: niemals "hiermit bewerbe ich mich". Direkt mit dem staerksten
   Sachargument oder einem konkreten Firmenbezug beginnen.
 - beleg1 und beleg2: die zwei schwersten Anforderungen der Analyse, in

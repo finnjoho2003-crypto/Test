@@ -165,6 +165,99 @@ def baue_anschreiben(inhalt: dict, person: dict, analyse: dict, ort: str) -> str
 # PDF
 # --------------------------------------------------------------------------- #
 
+# Stufen zum Verdichten, falls ein Dokument ueber die gewuenschte Seitenzahl
+# laeuft. Reihenfolge und Werte stammen aus den Kommentaren in den Vorlagen:
+# erst Abstaende, dann Zeilenabstand, zuletzt die Schriftgroesse - und die nie
+# so weit, dass das Dokument nicht mehr zu ueberfliegen ist. Lieber zwei Seiten
+# als eine unlesbare.
+VERDICHTUNG = {
+    # Gleichmaessig gestaffelt: Jede Stufe muss spuerbar mehr bringen als die
+    # vorige, sonst laeuft ein Brief, der nur wenig zu lang ist, bis zur
+    # haertesten Stufe durch und sieht gequetscht aus, obwohl eine milde
+    # gereicht haette.
+    "anschreiben": [
+        ".empfaenger { margin-top: 7mm; } .anlagen, .gruss { margin-top: 4mm; }"
+        " body { line-height: 1.4; } p.text { margin-bottom: 2.8mm; }"
+        " .betreff { margin-top: 5mm; }",
+        ".empfaenger { margin-top: 6mm; } .anlagen, .gruss { margin-top: 3.5mm; }"
+        " body { line-height: 1.36; font-size: 10.5pt; } p.text { margin-bottom: 2.5mm; }"
+        " .betreff { margin-top: 4.5mm; } .anrede { margin-top: 4mm; }"
+        " .datum { margin-top: 3mm; }",
+        ".empfaenger { margin-top: 5mm; } .anlagen, .gruss { margin-top: 3mm; }"
+        " body { line-height: 1.32; font-size: 10.3pt; } p.text { margin-bottom: 2.2mm; }"
+        " .betreff { margin-top: 4mm; } .anrede { margin-top: 3.5mm; }"
+        " .datum { margin-top: 2.5mm; } .briefkopf { padding-bottom: 2mm; }",
+        "@page { margin: 15mm 18mm 13mm 22mm; }"
+        " .empfaenger { margin-top: 4mm; } .anlagen, .gruss { margin-top: 2.5mm; }"
+        " body { line-height: 1.28; font-size: 10.2pt; } p.text { margin-bottom: 2mm; }"
+        " .betreff { margin-top: 3.5mm; } .anrede { margin-top: 3mm; }"
+        " .datum { margin-top: 2mm; } .briefkopf { padding-bottom: 1.5mm; }"
+        " .signatur { margin-top: 1.5mm; }",
+    ],
+    "lebenslauf": [
+        "section { margin-top: 5mm; } .eintrag { margin-bottom: 3mm; }"
+        " .fuss { margin-top: 4mm; }",
+        "section { margin-top: 4.5mm; } .eintrag { margin-bottom: 2.6mm; }"
+        " .fuss { margin-top: 3.5mm; } ul.punkte li { margin-bottom: 0.6mm; }",
+        "section { margin-top: 4mm; } .eintrag { margin-bottom: 2.3mm; }"
+        " .fuss { margin-top: 3mm; } ul.punkte li { margin-bottom: 0.5mm; }"
+        " body { font-size: 10pt; line-height: 1.4; }",
+    ],
+}
+
+
+def _mit_stufe(roh: str, css: str) -> str:
+    """Haengt eine Verdichtungsstufe als letztes Stylesheet an.
+
+    Als eigener Block direkt vor </head> - dadurch gewinnt er gegen die
+    Vorlage, ohne dass an ihr etwas geaendert werden muesste. Die Vorlage
+    bleibt so lesbar und die Verdichtung an einer Stelle nachvollziehbar.
+    """
+    block = f'<style id="verdichtung">\n{css}\n</style>\n</head>'
+    return roh.replace("</head>", block, 1)
+
+
+def rendere_begrenzt(pfad: Path, art: str, hart: int, weich: int = 0) -> int:
+    """Rendert und verdichtet, bis das Dokument in `hart` Seiten passt.
+
+    `hart` ist die Grenze, die nicht ueberschritten werden darf - dafuer werden
+    alle Stufen ausgereizt. Ohne das war "eine Seite" eine Bitte an das Modell
+    und keine Zusage: Ein Anschreiben, das um drei Zeilen zu lang ist, wandert
+    sonst auf zwei Seiten, und ein zweiseitiges Anschreiben liest niemand zu
+    Ende.
+
+    `weich` ist die Wunschgroesse. Sie wird nur mit der ersten, schonendsten
+    Stufe versucht - gegen die fast leere letzte Seite, die wie ein Fehler
+    aussieht. Genuegt das nicht, ist der Inhalt wirklich laenger und darf auch
+    danach aussehen; die Vorlage bleibt dann unangetastet.
+    """
+    urfassung = pfad.read_text(encoding="utf-8")
+    stufen = VERDICHTUNG.get(art, [])
+    name = pfad.with_suffix(".pdf").name
+
+    def rendere(css: str | None) -> int:
+        pfad.write_text(_mit_stufe(urfassung, css) if css else urfassung,
+                        encoding="utf-8")
+        return rendere_pdf([pfad]).get(name, 0)
+
+    seiten = rendere(None)
+
+    if weich and stufen and seiten > weich:
+        versuch = rendere(stufen[0])
+        if versuch and versuch <= weich:
+            return versuch
+        seiten = rendere(None)  # Zurueck auf Anfang, dann die harte Grenze.
+
+    for css in stufen:
+        if seiten and seiten <= hart:
+            break
+        seiten = rendere(css)
+
+    # Passt es auch nach der letzten Stufe nicht, bleibt die kompakteste
+    # Fassung stehen - sie ueberschreitet am wenigsten.
+    return seiten
+
+
 def rendere_pdf(html_pfade: list[Path]) -> dict[str, int]:
     """Rendert HTML nach PDF und gibt die Seitenzahl je Datei zurueck."""
     if not html_pfade:

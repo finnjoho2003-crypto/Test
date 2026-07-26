@@ -26,15 +26,15 @@
   /* Massvorgaben nach DIN 5008 (Form B): Anschriftfeld beginnt bei 45 mm,
      Seitenraender 25/20 mm. Personaler erkennen ein normgerechtes Schreiben
      sofort - und ein schiefes eben auch. */
-  @page { size: A4; margin: 20mm 20mm 18mm 25mm; }
+  @page { size: A4; margin: 18mm 20mm 16mm 25mm; }
 
   * { box-sizing: border-box; }
   html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body {
     margin: 0;
     font-family: var(--font-body);
-    font-size: 11pt;
-    line-height: 1.5;
+    font-size: 10.8pt;
+    line-height: 1.45;
     color: var(--ink);
   }
 
@@ -62,40 +62,41 @@
   .absender-kontakt {
     text-align: right;
     font-size: 9pt;
-    line-height: 1.6;
+    line-height: 1.45;
     color: var(--muted);
     white-space: nowrap;
   }
   .absender-kontakt a { color: inherit; text-decoration: none; }
 
   /* ---------- Anschriftfeld ---------- */
-  /* Das Anschreiben muss auf eine Seite. Reicht es knapp nicht, zuerst den
-     Text kuerzen - ein Absatz weniger wirkt immer besser als ein gequetschtes
-     Layout. Erst danach an den Abstaenden drehen: .empfaenger margin-top
-     12mm → 10mm, .anlagen und .gruss je 6mm → 5mm, zuletzt line-height
-     1.5 → 1.45. Schriftgroesse unter 10.5pt nicht reduzieren. */
+  /* Das Anschreiben muss auf eine Seite - dafuer sorgt rendere_begrenzt()
+     in webapp/kern/dokumente.py notfalls durch Verdichtungsstufen. Diese
+     Grundfassung ist so eingestellt, dass ein Brief von rund 330 Woertern
+     ohne jede Stufe passt; erst darueber wird nachgezogen. Wer hier etwas
+     vergroessert, verschiebt diese Grenze - dann VERDICHTUNG dort mitpruefen.
+     Schriftgroesse unter 10.2pt nicht gehen. */
   .empfaenger {
-    margin-top: 12mm;
-    font-size: 11pt;
-    line-height: 1.45;
+    margin-top: 9mm;
+    font-size: 10.8pt;
+    line-height: 1.4;
   }
   .empfaenger .firma { font-weight: 600; }
 
   .datum {
     text-align: right;
-    margin-top: 6mm;
+    margin-top: 4mm;
     font-size: 10.5pt;
     color: var(--muted);
   }
 
   /* ---------- Betreff ---------- */
   .betreff {
-    margin-top: 7mm;
+    margin-top: 6mm;
     font-family: var(--font-heading);
     font-weight: 700;
-    font-size: 11.5pt;
+    font-size: 11.2pt;
     color: var(--primary-text);
-    line-height: 1.35;
+    line-height: 1.3;
   }
   .betreff .referenz {
     display: block;
@@ -106,18 +107,18 @@
   }
 
   /* ---------- Fliesstext ---------- */
-  .anrede { margin-top: 6mm; }
-  p.text { margin: 0 0 3.6mm; text-align: left; }
+  .anrede { margin-top: 5mm; }
+  p.text { margin: 0 0 3.1mm; text-align: left; }
   p.text:last-of-type { margin-bottom: 0; }
   strong { color: var(--primary-text); font-weight: 700; }
 
-  .gruss { margin-top: 6mm; }
+  .gruss { margin-top: 5mm; }
   .signatur { margin-top: 2mm; }
   .signatur img { height: 14mm; display: block; margin-bottom: 1mm; }
   .signatur .name { font-weight: 600; }
 
   .anlagen {
-    margin-top: 6mm;
+    margin-top: 4mm;
     font-size: 9.5pt;
     color: var(--muted);
     border-top: 0.6pt solid var(--rule);
