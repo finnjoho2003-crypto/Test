@@ -23,28 +23,63 @@ import time
 from pathlib import Path
 
 CANDIDATES = [
+    # Linux
     "/opt/pw-browsers/chromium-*/chrome-linux/chrome",
     "/opt/pw-browsers/chromium_headless_shell-*/chrome-linux/headless_shell",
     "/usr/bin/chromium",
     "/usr/bin/chromium-browser",
     "/usr/bin/google-chrome",
+    "/snap/bin/chromium",
+    # macOS
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+    # Windows. Edge steht bewusst mit in der Liste: Es ist auf jedem Windows
+    # vorinstalliert und beruht auf derselben Grundlage - damit gelingt die
+    # PDF-Ausgabe auch dann, wenn Chrome nie installiert wurde.
+    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+    r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
 ]
 
 
+def _laeuft(pfad: str) -> bool:
+    """Prueft, ob der gefundene Browser tatsaechlich startet.
+
+    Notwendig, nicht vorsichtshalber: Auf Ubuntu ist /usr/bin/chromium-browser
+    ueblicherweise nur eine Huelle, die auf das Snap-Paket verweist und ohne
+    dieses mit einer Fehlermeldung abbricht. Wer nur den Pfad prueft, findet
+    sie zuerst und erzeugt danach kein einziges PDF - mit einer Meldung, die
+    nach einem Fehler im Programm aussieht statt nach einem fehlenden Paket.
+    """
+    try:
+        return subprocess.run([pfad, "--version"], capture_output=True,
+                              timeout=20).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def find_chromium() -> str:
-    for name in ("chromium", "chromium-browser", "google-chrome", "chrome"):
-        found = shutil.which(name)
-        if found:
-            return found
+    kandidaten = []
+    for name in ("chromium", "chromium-browser", "google-chrome", "chrome",
+                 "msedge"):
+        gefunden = shutil.which(name)
+        if gefunden:
+            kandidaten.append(gefunden)
     for pattern in CANDIDATES:
-        matches = sorted(glob.glob(pattern))
-        if matches:
-            return matches[-1]
+        # Windows-Pfade enthalten Umgebungsvariablen wie %LOCALAPPDATA%.
+        kandidaten.extend(sorted(glob.glob(os.path.expandvars(pattern))))
+
+    for pfad in kandidaten:
+        if _laeuft(pfad):
+            return pfad
     raise SystemExit(
-        "Kein Chromium gefunden. Bitte Chrome/Chromium installieren oder den "
-        "Pfad ueber die Umgebungsvariable CHROMIUM_BIN setzen."
+        "Kein Chrome, Chromium oder Edge gefunden. Bitte einen davon "
+        "installieren oder den Pfad ueber die Umgebungsvariable CHROMIUM_BIN "
+        "setzen. Alles andere funktioniert auch ohne - nur die PDF-Ausgabe "
+        "braucht einen dieser Browser."
     )
 
 

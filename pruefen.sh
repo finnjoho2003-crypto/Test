@@ -135,6 +135,27 @@ else
 fi
 
 echo
+echo "-- Startversuch (nur zum Pruefen, auf einem anderen Port)"
+# Den Dienst wirklich starten statt nur zu raten. Wenn jemand meldet "laesst
+# sich nicht starten", ist die eigentliche Fehlermeldung das, was fehlt -
+# also wird sie hier erzeugt und gleich mit ausgegeben.
+PRUEFPORT=$((PORT + 111))
+PRUEFLOG=$(mktemp)
+BEWERBUNG_DATA="${BEWERBUNG_DATA:-bewerbung}" timeout 25 \
+  python3 -u webapp/server.py --port "$PRUEFPORT" --kein-browser >"$PRUEFLOG" 2>&1 &
+PRUEFPID=$!
+sleep 6
+if grep -q "Der Bewerbungsassistent laeuft" "$PRUEFLOG"; then
+  echo "   Ergebnis       : startet einwandfrei"
+else
+  echo "   Ergebnis       : STARTET NICHT. Meldung:"
+  tail -n 14 "$PRUEFLOG" | sed 's/^/                    /'
+fi
+kill "$PRUEFPID" 2>/dev/null
+wait "$PRUEFPID" 2>/dev/null
+rm -f "$PRUEFLOG"
+
+echo
 echo "-- Wenn sich die Seite nicht oeffnen laesst"
 echo "   bash oeffnen.sh    - oeffnet den Assistenten im Editor selbst,"
 echo "                        ohne die Weiterleitung von GitHub."

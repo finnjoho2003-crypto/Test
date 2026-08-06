@@ -15,6 +15,26 @@ echo ""
 echo "  Bewerbungsassistent wird gestartet …"
 echo ""
 
+# Python suchen, bevor irgendetwas anderes passiert. Ohne diese Pruefung
+# scheitert der Start weiter unten mit "python3: command not found" - eine
+# Meldung, die nicht sagt, was zu tun ist.
+PY=""
+for kandidat in python3 python; do
+  if command -v "$kandidat" >/dev/null 2>&1 \
+     && "$kandidat" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null; then
+    PY="$kandidat"; break
+  fi
+done
+if [ -z "$PY" ]; then
+  echo "  Python 3 wurde nicht gefunden - ohne das laeuft der Assistent nicht."
+  echo ""
+  echo "  Einmalig installieren:  https://www.python.org/downloads/"
+  echo "  Bei der Installation unter Windows den Haken bei"
+  echo "  \"Add Python to PATH\" setzen, sonst wird es nachher nicht gefunden."
+  echo ""
+  exit 1
+fi
+
 # Eine noch laufende aeltere Fassung beenden. Ohne das scheitert jeder zweite
 # Start an einem belegten Port - und nach einem "git pull" liefe ausserdem
 # weiter der alte Programmstand, waehrend die Oberflaeche schon die neue ist.
@@ -65,9 +85,9 @@ if ist_unser_dienst "$ALT" && beende "$ALT"; then
 fi
 rm -f "$PID_DATEI"
 
-if ! python3 -c "import anthropic" 2>/dev/null; then
+if ! "$PY" -c "import anthropic" 2>/dev/null; then
   echo "  Bibliothek 'anthropic' fehlt - wird nachinstalliert …"
-  pip install --quiet anthropic >>"$PROTOKOLL" 2>&1 \
+  "$PY" -m pip install --quiet anthropic >>"$PROTOKOLL" 2>&1 \
     && echo "  erledigt." \
     || echo "  FEHLGESCHLAGEN - die Oberflaeche laeuft trotzdem, das Texten nicht."
   echo ""
@@ -104,4 +124,4 @@ fi
 # Dienst laengst laeuft. tee schreibt zusaetzlich ein Protokoll fuer pruefen.sh.
 # --port aus derselben Variable wie die Abschalt-Logik weiter oben. Sonst
 # raeumt das Skript Port 8765 frei und startet auf einem anderen.
-python3 -u webapp/server.py --port "$PORT" "${BINDUNG[@]}" "$@" 2>&1 | tee -a "$PROTOKOLL"
+"$PY" -u webapp/server.py --port "$PORT" "${BINDUNG[@]}" "$@" 2>&1 | tee -a "$PROTOKOLL"
