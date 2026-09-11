@@ -3,6 +3,10 @@ __pycache__/
 
 # Persoenliche Bewerbungsdaten und erzeugte Unterlagen (nur im Projektstamm)
 /bewerbung/
+# Sicherungen aus sichern.sh. Sie enthalten den kompletten Werdegang samt
+# Adresse und Telefonnummer - die gehoeren unter keinen Umstaenden in ein
+# Repository, auch nicht in ein privates.
+/bewerbung-sicherung-*.zip
 *.pdf
 /brand.json
 /theme.css

@@ -82,6 +82,25 @@ mehr korrigieren.
 Fuer die PDF-Ausgabe wird Chrome oder Edge gebraucht. Edge ist auf jedem
 Windows vorinstalliert, es ist also normalerweise nichts zu tun.
 
+### Daten mitnehmen oder sichern
+
+`bewerbung/` steht in `.gitignore` und kommt deshalb nicht ueber Git mit. Fuer
+den Umzug - etwa aus einem Codespace auf den eigenen Rechner - und als
+Sicherungskopie:
+
+```bash
+bash sichern.sh
+```
+
+Das legt `bewerbung-sicherung-JJJJ-MM-TT.zip` im Projektordner ab. Diese Datei
+auf den Zielrechner kopieren, dort in den Programmordner legen und entpacken -
+danach liegt dort ein Ordner `bewerbung` mit allem darin.
+
+Der API-Schluessel bleibt bewusst draussen; er ist in Sekunden neu eingetragen,
+waehrend eine Datei mit einem gueltigen Schluessel darin irgendwann versehentlich
+irgendwo landet. Wer ihn dennoch braucht: `bash sichern.sh --mit-schluessel`.
+Sicherungsdateien stehen ebenfalls in `.gitignore`.
+
 Manueller Start ohne Skript:
 
 ```bash
