@@ -1,0 +1,7 @@
+# Zeilenenden festnageln. Ohne das checkt Git die Batch-Datei je nach
+# Einstellung mit Unix-Enden aus; Windows stolpert dann ueber mehrzeilige
+# Bloecke darin. Die Shell-Skripte brauchen umgekehrt LF, sonst scheitert
+# schon die Zeile mit dem Interpreter.
+*.bat       text eol=crlf
+*.sh        text eol=lf
+*.command   text eol=lf

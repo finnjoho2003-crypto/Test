@@ -150,7 +150,9 @@ def render(html_path: Path, pdf_path: Path, binary: str, timeout: int = 120) -> 
         sys.stderr.write(proc.stderr[-2000:] + "\n")
         raise SystemExit(f"PDF-Erzeugung fehlgeschlagen fuer {html_path}")
 
-    print(f"✓ {pdf_path}  ({pdf_path.stat().st_size // 1024} KB, "
+    # "OK" statt eines Hakens: Diese Zeile wird von dokumente.py wieder
+    # eingelesen, und unter Windows laesst sich U+2713 nicht ausgeben.
+    print(f"OK {pdf_path}  ({pdf_path.stat().st_size // 1024} KB, "
           f"{page_count(pdf_path)} Seite(n))")
 
 

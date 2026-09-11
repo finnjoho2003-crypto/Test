@@ -499,7 +499,7 @@ def extract(url: str, max_css: int = 10, timeout: int = DEFAULT_TIMEOUT) -> dict
     if not urllib.parse.urlparse(url).scheme:
         url = "https://" + url
 
-    print(f"→ lade {url}", file=sys.stderr)
+    print(f"-> lade {url}", file=sys.stderr)
     final_url, html = fetch(url, timeout)
     if not html:
         raise SystemExit(f"Website nicht erreichbar: {url}")
@@ -535,7 +535,7 @@ def extract(url: str, max_css: int = 10, timeout: int = DEFAULT_TIMEOUT) -> dict
         if css_url in seen:
             continue
         seen.add(css_url)
-        print(f"→ CSS {css_url}", file=sys.stderr)
+        print(f"-> CSS {css_url}", file=sys.stderr)
         _, css = fetch(css_url, timeout)
         if css:
             loaded += 1
@@ -695,12 +695,12 @@ def main() -> None:
 
     with open(args.out, "w", encoding="utf-8") as fh:
         json.dump(brand, fh, indent=2, ensure_ascii=False)
-    print(f"✓ {args.out}", file=sys.stderr)
+    print(f"OK {args.out}", file=sys.stderr)
 
     if args.emit_css:
         with open(args.emit_css, "w", encoding="utf-8") as fh:
             fh.write(emit_css(brand))
-        print(f"✓ {args.emit_css}", file=sys.stderr)
+        print(f"OK {args.emit_css}", file=sys.stderr)
 
     c = brand["colors"]
     print(json.dumps({

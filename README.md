@@ -58,8 +58,29 @@ Terminal und laesst sich kopieren.
 
 Den API-Schluessel fragt die Seite beim ersten Oeffnen einmalig ab; er landet
 in `bewerbung/schluessel.txt` (nur fuer die eigene Nutzerin lesbar) und wird nie
-wieder abgefragt. Wer lieber eine Umgebungsvariable setzt, kann das weiterhin
-tun - `ANTHROPIC_API_KEY` hat Vorrang.
+wieder abgefragt. Er wird beim Eintragen sofort geprueft und nur gespeichert,
+wenn er funktioniert - ein fehlerhafter ueberschreibt also keinen
+funktionierenden.
+
+Ein eingetragener Schluessel hat Vorrang vor der Umgebungsvariable
+`ANTHROPIC_API_KEY`. Das ist Absicht: Setzt die Umgebung einen alten oder
+unvollstaendigen Wert, liesse sich der Fehler sonst ueber die Oberflaeche nicht
+mehr korrigieren.
+
+### Windows Schritt fuer Schritt
+
+1. **Python installieren** - [python.org/downloads](https://www.python.org/downloads/).
+   Beim Installieren unten **"Add python.exe to PATH"** ankreuzen. Ohne diesen
+   Haken findet Windows es spaeter nicht.
+2. **Projekt herunterladen** - auf GitHub der gruene Knopf *Code* >
+   *Download ZIP*, danach entpacken (Rechtsklick > *Alle extrahieren*).
+3. **`start.bat` doppelklicken.** Beim ersten Mal richtet sich alles selbst
+   ein, das dauert einen Moment. Danach oeffnet sich der Browser von allein.
+4. Das schwarze Fenster **offen lassen** - es zu schliessen beendet den
+   Assistenten.
+
+Fuer die PDF-Ausgabe wird Chrome oder Edge gebraucht. Edge ist auf jedem
+Windows vorinstalliert, es ist also normalerweise nichts zu tun.
 
 Manueller Start ohne Skript:
 

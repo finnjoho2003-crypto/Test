@@ -591,7 +591,10 @@ def main() -> None:
     except OSError:
         pass  # Ohne PID-Datei laeuft alles weiter, nur der Neustart wird ruppiger.
 
-    rahmen = "─" * 52
+    # Nur ASCII: Die deutsche Windows-Konsole rechnet in cp1252 und kennt
+    # den Kasten-Strich U+2500 nicht. Eine Zierlinie war den Absturz beim
+    # Start nicht wert.
+    rahmen = "-" * 52
     print(f"\n  {rahmen}")
     print("   Der Bewerbungsassistent laeuft. Im Browser oeffnen:")
     print(f"\n       {adresse}\n")

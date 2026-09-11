@@ -272,7 +272,8 @@ def rendere_pdf(html_pfade: list[Path]) -> dict[str, int]:
     )
     seiten: dict[str, int] = {}
     for zeile in ergebnis.stdout.splitlines():
-        treffer = re.search(r"✓ (\S+\.pdf).*?(\d+) Seite", zeile)
+        # Muss zur Ausgabe in render_pdf.py passen.
+        treffer = re.search(r"OK (\S+\.pdf).*?(\d+) Seite", zeile)
         if treffer:
             seiten[Path(treffer.group(1)).name] = int(treffer.group(2))
     if not seiten and ergebnis.returncode != 0:
